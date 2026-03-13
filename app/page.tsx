@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,381 +9,252 @@ const SUPABASE_URL = "https://phvtklkcgmnqnscmymxr.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBodnRrbGtjZ21ucW5zY215bXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTY3NDAsImV4cCI6MjA4Nzk3Mjc0MH0.JBt2MfJsFmr7j2Kd0-O_YbLtUzDIBGPQt8hODfYhRbc";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-export default function Home() {
-  const pathname = usePathname(); // Aktif menüyü bulmak için
-  const [aktifSirket, setAktifSirket] = useState<any>(null);
-  
-  // YETKİ KONTROL STATELERİ
-  const [kullaniciRol, setKullaniciRol] = useState<string>("");
-  const isYonetici = kullaniciRol.includes("YONETICI");
-  const isPlasiyer = kullaniciRol.includes("PLASIYER") || isYonetici;
-  const isDepocu = kullaniciRol.includes("DEPOCU") || isYonetici;
-  const isMuhasebe = kullaniciRol.includes("MUHASEBE") || isYonetici;
+// --- TİP TANIMLAMALARI ---
+interface Sirket { id: number; isletme_adi: string; rol: string; }
+interface Kullanici { ad_soyad: string; rol: string; }
+interface Siparis {
+    id: number;
+    siparis_no: string;
+    cari_adi: string;
+    durum: string;
+    toplam_tutar: number;
+    tarih: string;
+    created_at: string;
+}
 
-  const [siparisler, setSiparisler] = useState<any[]>([]);
-  const [firmalar, setFirmalar] = useState<any[]>([]);
-  const [aramaTerimi, setAramaTerimi] = useState("");
-  const [yukleniyor, setYukleniyor] = useState(true);
-  const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
+const parseTutar = (val: any): number => {
+    if (!val) return 0;
+    if (typeof val === 'number') return val;
+    let str = String(val).trim();
+    if (str.includes('.') && str.includes(',')) { str = str.replace(/\./g, '').replace(',', '.'); } 
+    else if (str.includes(',')) { str = str.replace(',', '.'); }
+    const num = Number(str);
+    return isNaN(num) ? 0 : num;
+};
 
-  const [modalAcik, setModalAcik] = useState(false);
-  const [isYeniSiparis, setIsYeniSiparis] = useState(false);
-  const [seciliSiparis, setSeciliSiparis] = useState<any>(null);
-  const [seciliFirmaId, setSeciliFirmaId] = useState<string>("");
-  const [siparisKalemleri, setSiparisKalemleri] = useState<any[]>([]);
+export default function SiparislerSayfasi() {
+    const pathname = usePathname();
+    const [aktifSirket, setAktifSirket] = useState<Sirket | null>(null);
 
-  const [gelenIstekler, setGelenIstekler] = useState<any[]>([]);
-  const [istekModalAcik, setIstekModalAcik] = useState(false);
+    // YETKİ KONTROL STATELERİ
+    const [kullaniciRol, setKullaniciRol] = useState<string>("");
+    const isYonetici = kullaniciRol.includes("YONETICI");
+    const isPlasiyer = kullaniciRol.includes("PLASIYER") || isYonetici;
+    const isDepocu = kullaniciRol.includes("DEPOCU") || isYonetici;
+    const isMuhasebe = kullaniciRol.includes("MUHASEBE") || isYonetici;
 
-  useEffect(() => {
-    const sirketStr = localStorage.getItem("aktifSirket");
-    const kullaniciStr = localStorage.getItem("aktifKullanici");
-    
-    if (!sirketStr || !kullaniciStr) { window.location.href = "/login"; return; }
-    
-    const sirket = JSON.parse(sirketStr);
-    const kullanici = JSON.parse(kullaniciStr);
-    
-    if (sirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
-    
-    setKullaniciRol(kullanici.rol || "");
-    setAktifSirket(sirket);
-  }, []);
+    const [siparisler, setSiparisler] = useState<Siparis[]>([]);
+    const [aramaTerimi, setAramaTerimi] = useState("");
+    const [yukleniyor, setYukleniyor] = useState(true);
+    const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
+    const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (aktifSirket) {
-        verileriGetir();
-        istekleriGetir();
-    }
-  }, [aktifSirket]);
-
-  async function istekleriGetir() {
-      const { data: istekData } = await supabase.from("b2b_baglantilar").select("*").eq("toptanci_id", aktifSirket.id).eq("durum", "BEKLIYOR");
-      if (istekData && istekData.length > 0) {
-          const marketIds = istekData.map(i => i.market_id);
-          const { data: marketData } = await supabase.from("sirketler").select("*").in("id", marketIds);
-          const birlesik = istekData.map(istek => ({ ...istek, marketBilgisi: marketData?.find(m => m.id === istek.market_id) }));
-          setGelenIstekler(birlesik);
-      } else {
-          setGelenIstekler([]);
-      }
-  }
-
-  async function verileriGetir() {
-    setYukleniyor(true);
-    const { data: fData } = await supabase.from("firmalar").select("*").eq("sahip_sirket_id", aktifSirket.id).order('unvan');
-    setFirmalar(fData || []);
-
-    const { data: sData, error } = await supabase.from("siparisler").select("*").eq("satici_sirket_id", aktifSirket.id).order('id', { ascending: false });
-    if (!error) setSiparisler(sData || []);
-    setYukleniyor(false);
-  }
-
-  const istegiOnayla = async (istek: any) => {
-      await supabase.from("b2b_baglantilar").update({ durum: 'ONAYLANDI' }).eq("id", istek.id);
-      const { data: mevcutCari } = await supabase.from("firmalar").select("id").eq("sahip_sirket_id", aktifSirket.id).eq("bagli_sirket_id", istek.market_id).single();
-      if (!mevcutCari) {
-          const yeniCari = { sahip_sirket_id: aktifSirket.id, bagli_sirket_id: istek.market_id, unvan: istek.marketBilgisi.unvan, firma_tipi: "Müşteri", telefon: istek.marketBilgisi.telefon, adres: istek.marketBilgisi.adres, vergi_no: istek.marketBilgisi.vergi_no };
-          await supabase.from("firmalar").insert([yeniCari]);
-      }
-      alert("Müşteriyle bağlantı kuruldu ve Cari Kartlara eklendi!");
-      istekleriGetir(); verileriGetir();
-  };
-
-  const istegiReddet = async (istekId: number) => {
-      if(window.confirm("Bu isteği reddetmek istediğinize emin misiniz?")) {
-          await supabase.from("b2b_baglantilar").update({ durum: 'REDDEDILDI' }).eq("id", istekId);
-          istekleriGetir();
-      }
-  };
-
-  const yeniSiparisBaslat = () => { setIsYeniSiparis(true); setSeciliSiparis(null); setSeciliFirmaId(""); setSiparisKalemleri([{ urun_adi: "", miktar: 1, birim_fiyat: 0 }]); setModalAcik(true); };
-  const duzelt = async () => { if (!seciliSiparisId) return alert("Lütfen listeden bir sipariş seçin!"); const siparis = siparisler.find(s => s.id === seciliSiparisId); if (!siparis) return; setIsYeniSiparis(false); setSeciliSiparis(siparis); setSeciliFirmaId(siparis.alici_firma_id?.toString() || ""); const { data } = await supabase.from("siparis_kalemleri").select("*").eq("siparis_id", siparis.id); setSiparisKalemleri(data || []); setModalAcik(true); };
-  const sil = async () => { if (!seciliSiparisId) return alert("Lütfen listeden sipariş seçin!"); const siparis = siparisler.find(s => s.id === seciliSiparisId); if (siparis?.durum !== "YENI" && siparis?.durum !== "HAZIRLANIYOR") return alert("Sadece 'Yeni' siparişler silinebilir!"); if(window.confirm("Siparişi silmek istediğinize emin misiniz?")) { await supabase.from("siparis_kalemleri").delete().eq("siparis_id", seciliSiparisId); await supabase.from("siparisler").delete().eq("id", seciliSiparisId); setSeciliSiparisId(null); verileriGetir(); } };
-  const urunSatiriEkle = () => setSiparisKalemleri([...siparisKalemleri, { urun_adi: "", miktar: 1, birim_fiyat: 0 }]);
-  const satirGuncelle = (index: number, alan: string, deger: any) => { const yeniListe = [...siparisKalemleri]; yeniListe[index][alan] = deger; setSiparisKalemleri(yeniListe); };
-  const durumIlerlet = async () => { if (!seciliSiparisId) return alert("Sipariş seçin!"); const siparis = siparisler.find(s => s.id === seciliSiparisId); if (!siparis) return; let yeniDurum = siparis.durum; if (siparis.durum === "YENI") yeniDurum = "HAZIRLANIYOR"; else if (siparis.durum === "ONAY_BEKLIYOR") yeniDurum = "HAZIR"; else if (siparis.durum === "HAZIR") yeniDurum = "BITTI"; else return; await supabase.from("siparisler").update({ durum: yeniDurum }).eq("id", siparis.id); verileriGetir(); };
-  
-  const kaydetVeGonder = async (durumHedef: string) => {
-    if (!seciliFirmaId) return alert("Lütfen önce müşteri seçin!");
-    const toplam = siparisKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
-    let currentId = seciliSiparis?.id;
-
-    if (isYeniSiparis) {
-      const yeniNo = `SIP-${Math.floor(1000 + Math.random() * 9000)}`;
-      const { data, error } = await supabase.from("siparisler").insert([{ siparis_no: yeniNo, satici_sirket_id: aktifSirket.id, alici_firma_id: Number(seciliFirmaId), durum: durumHedef, toplam_tutar: toplam }]).select().single();
-      if (error) return alert("Hata: " + error.message);
-      currentId = data.id;
-    } else {
-      await supabase.from("siparisler").update({ toplam_tutar: toplam, durum: durumHedef, alici_firma_id: Number(seciliFirmaId) }).eq("id", currentId);
-    }
-
-    await supabase.from("siparis_kalemleri").delete().eq("siparis_id", currentId);
-    const eklenecekler = siparisKalemleri.filter(k => k.urun_adi).map(k => ({ siparis_id: Number(currentId), urun_adi: k.urun_adi, miktar: k.miktar, birim_fiyat: k.birim_fiyat }));
-    if (eklenecekler.length > 0) await supabase.from("siparis_kalemleri").insert(eklenecekler);
-
-    if (durumHedef === "ONAY_BEKLIYOR" && seciliSiparis?.durum !== "ONAY_BEKLIYOR") {
-      const { data: f } = await supabase.from("firmalar").select("bakiye").eq("id", seciliFirmaId).single();
-      await supabase.from("firmalar").update({ bakiye: Number(f?.bakiye || 0) + toplam }).eq("id", seciliFirmaId);
-    }
-    setModalAcik(false); verileriGetir();
-  };
-
-  const firmaBul = (id: number) => firmalar.find(f => f.id === id)?.unvan || "Belirsiz Cari";
-  const filtrelenmisSiparisler = siparisler.filter(s => s.siparis_no.toLowerCase().includes(aramaTerimi.toLowerCase()) || firmaBul(s.alici_firma_id).toLowerCase().includes(aramaTerimi.toLowerCase()));
-  const getSonrakiIslemMetni = () => { if (!seciliSiparisId) return "İşlem"; const s = siparisler.find(x => x.id === seciliSiparisId); if (s?.durum === "YENI") return "Hazırlığa Al"; if (s?.durum === "ONAY_BEKLIYOR") return "Müşteri Onayladı"; if (s?.durum === "HAZIR") return "Teslimatı Bitir"; return "İşlem Bekleniyor"; };
-  
-  const cikisYap = () => { localStorage.removeItem("aktifSirket"); localStorage.removeItem("aktifKullanici"); window.location.href = "/login"; };
-
-  if (!aktifSirket) return <div className="h-screen flex items-center justify-center bg-slate-100 font-bold text-slate-500">Sistem Doğrulanıyor...</div>;
-
-  return (
-    <div className="bg-slate-100 font-sans h-screen flex overflow-hidden text-slate-800">
-      
-      {/* SOL MENÜ (AKILLI VE KİLİTLİ TASARIM) */}
-      <aside className="w-56 bg-slate-900 text-slate-300 flex flex-col shrink-0 text-sm border-r border-slate-800 print:hidden">
-        <div className="h-16 flex flex-col items-center justify-center border-b border-slate-700 bg-slate-950 font-black text-white tracking-widest px-2 text-center">
-            <span className="text-orange-500 text-[10px] uppercase mb-0.5">
-                {isYonetici ? 'Sistem Yöneticisi' : 'Personel Hesabı'}
-            </span>
-            <span className="text-xs truncate w-full">{aktifSirket.isletme_adi}</span>
-        </div>
-        <nav className="flex-1 py-4 space-y-1 overflow-y-auto">
-  {aktifSirket.rol === "TOPTANCI" ? (
-      <>
-          {isYonetici ? <Link href="/dashboard" className={`flex items-center px-6 py-3 transition-all ${pathname === "/dashboard" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-chart-pie w-6"></i> Ana Sayfa</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-chart-pie w-6"></i> Ana Sayfa <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          
-          {/* YENİ EKLENEN POS EKRANI LİNKİ */}
-          {isYonetici || (kullaniciRol.includes("PLASIYER") || kullaniciRol.includes("DEPOCU")) ? <Link href="/pos" className={`flex items-center px-6 py-3 transition-all ${pathname === "/pos" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-
-          {isYonetici || (kullaniciRol.includes("PLASIYER") || kullaniciRol.includes("DEPOCU")) ? <Link href="/" className={`flex items-center px-6 py-3 transition-all ${pathname === "/" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-th-large w-6"></i> Siparişler (Fiş)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-th-large w-6"></i> Siparişler (Fiş) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          {isYonetici || kullaniciRol.includes("MUHASEBE") ? <Link href="/faturalar" className={`flex items-center px-6 py-3 transition-all ${pathname === "/faturalar" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-file-invoice w-6"></i> Faturalar</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-file-invoice w-6"></i> Faturalar <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          {isYonetici || kullaniciRol.includes("DEPOCU") ? <Link href="/stok" className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-box w-6"></i> Stok Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-box w-6"></i> Stok Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          {isYonetici || kullaniciRol.includes("DEPOCU") ? <Link href="/stok-hareketleri" className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok-hareketleri" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          {isYonetici || (kullaniciRol.includes("PLASIYER") || kullaniciRol.includes("MUHASEBE")) ? <Link href="/cari" className={`flex items-center px-6 py-3 transition-all ${pathname === "/cari" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-users w-6"></i> Cari Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-users w-6"></i> Cari Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-          {isYonetici || kullaniciRol.includes("MUHASEBE") ? <Link href="/ekstre" className={`flex items-center px-6 py-3 transition-all ${pathname === "/ekstre" ? "bg-slate-800 text-white border-l-4 border-blue-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400" title="Yetkiniz yok"><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-      </>
-  ) : (
-      <>
-          <Link href="/portal/pos" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/pos" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link>
-          <Link href="/stok" className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-box w-6"></i> Market Stokları</Link>
-          <Link href="/portal" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-store w-6"></i> Toptan Sipariş</Link>
-          <Link href="/portal/siparisler" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/siparisler" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-list-alt w-6"></i> Siparişlerim</Link>
-          <Link href="/portal/kasa" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/kasa" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-cash-register w-6"></i> Kasa & Nakit Akışı</Link>
-          <Link href="/portal/veresiye" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/veresiye" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-book w-6"></i> Veresiye Defteri</Link>
-      </>
-  )}
-</nav>
-
-        <div className="p-4 border-t border-slate-800 space-y-2">
-          {/* AYARLAR */}
-          {isYonetici ? (
-              <Link href="/ayarlar" className={`flex items-center px-2 py-2 transition w-full text-xs uppercase tracking-widest rounded ${pathname === "/ayarlar" ? "bg-slate-800 text-white" : "text-slate-300 hover:text-white"}`}><i className="fas fa-cog w-6"></i> Ayarlar</Link>
-          ) : (
-              <div className="flex items-center px-2 py-2 opacity-40 cursor-not-allowed text-slate-500 hover:text-red-400 transition-colors w-full text-xs uppercase tracking-widest" title="Ayarlara erişim yetkiniz yok"><i className="fas fa-cog w-6"></i> Ayarlar <i className="fas fa-lock ml-auto text-[10px]"></i></div>
-          )}
-          <button onClick={cikisYap} className="flex items-center px-2 py-2 hover:text-red-400 text-slate-500 transition w-full text-xs uppercase tracking-widest"><i className="fas fa-sign-out-alt w-6"></i> Çıkış Yap</button>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
+    useEffect(() => {
+        const sirketStr = localStorage.getItem("aktifSirket");
+        const kullaniciStr = localStorage.getItem("aktifKullanici");
+        if (!sirketStr || !kullaniciStr) { window.location.href = "/login"; return; }
         
-        {/* ÜST ARAÇ ÇUBUĞU */}
-        <header className="h-14 bg-slate-100 border-b border-slate-300 flex items-center px-2 space-x-1 shrink-0 print:hidden">
-            {/* Sadece Yönetici veya Plasiyer yeni sipariş girebilir/silebilir */}
-            {(isYonetici || isPlasiyer) && (
-                <>
-                    <button onClick={yeniSiparisBaslat} className="flex items-center px-4 py-1.5 bg-emerald-600 border border-emerald-700 text-white rounded hover:bg-emerald-700 text-xs font-bold shadow-sm">
-                        <i className="fas fa-plus mr-2"></i> Yeni Sipariş Ekle
-                    </button>
-                    <div className="w-px h-6 bg-slate-300 mx-2"></div>
-                </>
-            )}
+        try {
+            const sirket: Sirket = JSON.parse(sirketStr);
+            const kullanici: Kullanici = JSON.parse(kullaniciStr);
+            if (sirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
             
-            <button onClick={duzelt} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm"><i className="fas fa-edit text-blue-600 mr-2"></i> İncele / Düzelt</button>
+            const rolStr = kullanici.rol || "";
+            setKullaniciRol(rolStr);
+            setAktifSirket(sirket);
+
+            if (rolStr.includes("YONETICI") || rolStr.includes("PLASIYER") || rolStr.includes("DEPOCU")) {
+                verileriGetir(sirket.id);
+            } else {
+                setYukleniyor(false);
+            }
+        } catch(err) { window.location.href = "/login"; }
+    }, []);
+
+    async function verileriGetir(sirketId: number) {
+        setYukleniyor(true);
+        try {
+            // Firma isimlerini çekmek için (Eğer sipariş tablosunda sadece firma_id varsa eşleştirmek için)
+            const { data: firmalarData } = await supabase.from("firmalar").select("id, unvan").eq("sahip_sirket_id", sirketId);
+            const firmaMap: Record<number, string> = {};
+            if (firmalarData) {
+                firmalarData.forEach(f => firmaMap[f.id] = f.unvan);
+            }
+
+            // Siparişleri çek
+            const { data } = await supabase.from("siparisler").select("*").eq("satici_sirket_id", sirketId).order('id', { ascending: false });
             
-            {(isYonetici || isPlasiyer) && (
-                <button onClick={sil} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm"><i className="fas fa-trash-alt text-red-600 mr-2"></i> Sil</button>
-            )}
+            if (data) {
+                const islenmisSiparisler = data.map(s => ({
+                    ...s,
+                    cari_adi: s.cari_adi || firmaMap[s.alici_firma_id] || "Perakende / Bilinmiyor"
+                }));
+                setSiparisler(islenmisSiparisler);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+        setYukleniyor(false);
+    }
 
-            <div className="w-px h-6 bg-slate-300 mx-2"></div>
-            <button onClick={durumIlerlet} disabled={!seciliSiparisId || siparisler.find(s => s.id === seciliSiparisId)?.durum === "HAZIRLANIYOR"} className="flex items-center px-3 py-1.5 bg-blue-600 border border-blue-700 text-white rounded hover:bg-blue-700 text-xs font-bold shadow-sm disabled:opacity-50"><i className="fas fa-check-circle mr-2"></i> {getSonrakiIslemMetni()}</button>
-            <div className="w-px h-6 bg-slate-300 mx-2"></div>
-            <button onClick={() => window.print()} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm"><i className="fas fa-print text-slate-600 mr-2"></i> Yazdır</button>
+    const siparisSil = async () => {
+        if (!seciliSiparisId) return alert("Lütfen silmek için bir sipariş seçin!");
+        if (window.confirm("Bu siparişi kalıcı olarak silmek istediğinize emin misiniz?")) {
+            setYukleniyor(true);
+            await supabase.from("siparis_kalemleri").delete().eq("siparis_id", seciliSiparisId);
+            await supabase.from("siparisler").delete().eq("id", seciliSiparisId);
+            setSeciliSiparisId(null);
+            if (aktifSirket) verileriGetir(aktifSirket.id);
+        }
+    };
 
-            {isYonetici && gelenIstekler.length > 0 && (
-                <button onClick={() => setIstekModalAcik(true)} className="ml-auto flex items-center px-4 py-1.5 bg-orange-500 border border-orange-600 text-white rounded hover:bg-orange-600 text-xs font-black shadow-md animate-pulse">
-                    <i className="fas fa-bell mr-2 text-sm"></i> Yeni Müşteri İsteği ({gelenIstekler.length})
-                </button>
-            )}
-        </header>
+    const cikisYap = () => { localStorage.removeItem("aktifSirket"); localStorage.removeItem("aktifKullanici"); window.location.href = "/login"; };
 
-        {/* FİLTRE VE ARAMA */}
-        <div className="h-10 bg-slate-200 border-b border-slate-300 flex items-center px-4 shrink-0 space-x-4 print:hidden">
-            <span className="text-xs font-bold text-slate-600 uppercase">Sipariş Fişleri</span>
-            <div className="flex-1 max-w-md relative">
-                <input type="text" placeholder="Fiş No veya Cari Ünvanı ile arama yapın..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="w-full text-xs px-3 py-1 border border-slate-300 rounded shadow-inner outline-none focus:border-blue-500" />
-                <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-            </div>
-        </div>
+    const filtrelenmisSiparisler = siparisler.filter(s => 
+        (s.siparis_no || "").toLowerCase().includes(aramaTerimi.toLowerCase()) || 
+        (s.cari_adi || "").toLowerCase().includes(aramaTerimi.toLowerCase())
+    );
 
-        {/* DATA GRID */}
-        <div className="flex-1 overflow-auto bg-white relative print:hidden">
-            <table className="w-full text-left border-collapse whitespace-nowrap">
-                <thead className="bg-slate-100 border-b-2 border-slate-300 sticky top-0 z-10 shadow-sm">
-                    <tr className="text-[11px] font-bold text-slate-700">
-                        <th className="p-2 border-r border-slate-300 w-8 text-center"><i className="fas fa-caret-down"></i></th>
-                        <th className="p-2 border-r border-slate-300 w-32">Belge / Fiş No</th>
-                        <th className="p-2 border-r border-slate-300">Cari Adı (Müşteri)</th>
-                        <th className="p-2 border-r border-slate-300 w-40 text-center">Durum</th>
-                        <th className="p-2 border-r border-slate-300 w-40 text-right">Tutar (TL)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {filtrelenmisSiparisler.map((s) => {
-                        const isSelected = seciliSiparisId === s.id;
-                        let durumMetni = "Bilinmiyor"; let durumRenk = "text-slate-600";
-                        if(s.durum === "YENI") { durumMetni = "Yeni Sipariş"; durumRenk = "text-blue-600 font-bold"; }
-                        else if(s.durum === "HAZIRLANIYOR") { durumMetni = "Depoda Hazırlanıyor"; durumRenk = "text-orange-500 font-bold"; }
-                        else if(s.durum === "ONAY_BEKLIYOR") { durumMetni = "Onay Bekliyor"; durumRenk = "text-purple-600 font-bold"; }
-                        else if(s.durum === "HAZIR") { durumMetni = "Sevkiyata Hazır"; durumRenk = "text-emerald-600 font-bold"; }
-                        else if(s.durum === "BITTI") { durumMetni = "Teslim Edildi"; durumRenk = "text-slate-400"; }
+    if (!aktifSirket) return <div className="h-screen flex items-center justify-center bg-slate-100 font-bold text-slate-500">Sistem Doğrulanıyor...</div>;
 
-                        return (
-                            <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={duzelt} className={`text-[11px] font-medium border-b border-slate-200 cursor-pointer select-none ${isSelected ? 'bg-[#000080] text-white' : 'hover:bg-slate-100 bg-white text-slate-800'}`}>
-                                <td className="p-1.5 border-r border-slate-200 text-center">{isSelected && <i className="fas fa-caret-right text-white"></i>}</td>
-                                <td className="p-1.5 border-r border-slate-200">{s.siparis_no}</td>
-                                <td className="p-1.5 border-r border-slate-200">{firmaBul(s.alici_firma_id)}</td>
-                                <td className={`p-1.5 border-r border-slate-200 text-center ${isSelected ? 'text-white' : durumRenk}`}>{durumMetni}</td>
-                                <td className="p-1.5 border-r border-slate-200 text-right font-bold">{Number(s.toplam_tutar || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-        </div>
-      </main>
+    // Durum renklerini belirleyen yardımcı fonksiyon (Ekran görüntüsündeki gibi)
+    const getDurumRengi = (durum: string) => {
+        const d = durum.toLowerCase();
+        if (d.includes("onay bekliyor")) return "text-purple-600 font-bold";
+        if (d.includes("hazırlanıyor")) return "text-orange-500 font-bold";
+        if (d.includes("yeni sipariş") || d.includes("yeni")) return "text-blue-500 font-bold";
+        if (d.includes("tamamlandı") || d.includes("onaylandı")) return "text-emerald-600 font-bold";
+        if (d.includes("iptal") || d.includes("red")) return "text-red-600 font-bold";
+        return "text-slate-600 font-bold";
+    };
 
-      {/* --- MÜŞTERİ BAĞLANTI İSTEKLERİ MODALI --- */}
-      {isYonetici && istekModalAcik && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50">
-            <div className="bg-slate-100 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-400">
-                <div className="bg-orange-500 border-b border-orange-600 p-3 flex justify-between items-center text-white">
-                    <h3 className="text-sm font-bold flex items-center"><i className="fas fa-handshake mr-2"></i> Yeni Müşteri Çalışma İstekleri</h3>
-                    <button onClick={() => setIstekModalAcik(false)} className="hover:text-red-200 px-2"><i className="fas fa-times"></i></button>
-                </div>
-                <div className="p-4 bg-white max-h-[60vh] overflow-y-auto space-y-3">
-                    {gelenIstekler.map((istek, idx) => (
-                        <div key={idx} className="border border-slate-200 rounded-lg p-4 shadow-sm bg-slate-50 flex justify-between items-center">
-                            <div>
-                                <h4 className="font-black text-slate-800 text-lg">{istek.marketBilgisi?.isletme_adi}</h4>
-                                <div className="text-xs text-slate-500 mt-1 space-y-0.5">
-                                    <p><b>Resmi Ünvan:</b> {istek.marketBilgisi?.unvan} | <b>Vergi No:</b> {istek.marketBilgisi?.vergi_no}</p>
-                                    <p><b>Konum:</b> {istek.marketBilgisi?.il} / {istek.marketBilgisi?.ilce}</p>
-                                    <p><b>Telefon:</b> {istek.marketBilgisi?.telefon}</p>
-                                </div>
-                            </div>
-                            <div className="flex flex-col space-y-2">
-                                <button onClick={() => istegiOnayla(istek)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded shadow-sm flex items-center justify-center"><i className="fas fa-check-circle mr-1"></i> Müşteriyi Onayla</button>
-                                <button onClick={() => istegiReddet(istek.id)} className="px-4 py-1.5 bg-white border border-slate-300 hover:bg-red-50 text-red-600 text-xs font-bold rounded shadow-sm flex items-center justify-center"><i className="fas fa-times mr-1"></i> Reddet</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-      )}
+    return (
+        <div className="bg-slate-100 font-sans h-screen flex overflow-hidden text-slate-800 w-full relative">
+            {mobilMenuAcik && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setMobilMenuAcik(false)}></div>}
 
-      {/* --- SİPARİŞ DETAY MODALI --- */}
-      {modalAcik && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 print:static print:bg-white">
-          <div className="bg-slate-100 rounded shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden border border-slate-400 print:border-none print:shadow-none print:w-full">
-            <div className="bg-slate-200 border-b border-slate-300 p-2 flex justify-between items-center print:hidden">
-              <h3 className="text-xs font-bold text-slate-800 flex items-center"><i className="fas fa-file-invoice text-blue-600 mr-2 text-sm"></i> Toptan Satış Fişi {isYeniSiparis ? '(Yeni Kayıt)' : '(İnceleme/Düzeltme)'}</h3>
-              <div className="flex space-x-2">
-                 <button onClick={() => window.print()} className="text-slate-500 hover:text-blue-600 px-2 border border-slate-300 bg-white rounded shadow-sm text-xs"><i className="fas fa-print mr-1"></i> Yazdır</button>
-                 <button onClick={() => setModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times"></i></button>
-              </div>
-            </div>
-            
-            <div className="p-4 bg-white border-b border-slate-300 shrink-0">
-                <div className="flex space-x-8">
-                    <div className="flex-1 space-y-2">
-                        <div className="flex items-center">
-                            <label className="w-24 text-xs font-semibold text-slate-700">Fiş No</label>
-                            <input type="text" value={isYeniSiparis ? "OTOMATİK VERİLECEK" : seciliSiparis?.siparis_no} disabled className="flex-1 border border-slate-300 px-2 py-1 text-xs bg-yellow-50 font-bold outline-none" />
-                        </div>
-                        <div className="flex items-center">
-                            <label className="w-24 text-xs font-semibold text-slate-700">Cari Kodu/Adı</label>
-                            {isYeniSiparis ? (
-                                <select value={seciliFirmaId} onChange={(e) => setSeciliFirmaId(e.target.value)} className="flex-1 border border-slate-300 px-2 py-1 text-xs focus:bg-blue-50 outline-none">
-                                    <option value="">--- Listeden Seçiniz ---</option>
-                                    {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
-                                </select>
-                            ) : (
-                                <input type="text" value={firmaBul(Number(seciliFirmaId))} disabled className="flex-1 border border-slate-300 px-2 py-1 text-xs bg-slate-50 font-bold outline-none" />
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-auto bg-slate-50 p-2 print:p-0 print:bg-white">
-                <table className="w-full text-left border-collapse bg-white border border-slate-300">
-                    <thead className="bg-slate-200 border-b border-slate-300">
-                        <tr className="text-[11px] font-bold text-slate-700">
-                            <th className="p-1.5 border-r border-slate-300 w-8 text-center print:hidden">#</th>
-                            <th className="p-1.5 border-r border-slate-300">Stok Adı / Açıklama</th>
-                            <th className="p-1.5 border-r border-slate-300 w-24 text-center">Miktar</th>
-                            <th className="p-1.5 border-r border-slate-300 w-32 text-right">Birim Fiyat</th>
-                            <th className="p-1.5 border-r border-slate-300 w-32 text-right">Tutar (TL)</th>
-                            {(isYonetici || isPlasiyer) && <th className="p-1.5 w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {siparisKalemleri.map((item, index) => (
-                            <tr key={index} className="border-b border-slate-200 hover:bg-yellow-50 focus-within:bg-yellow-50 transition-colors">
-                                <td className="p-1 border-r border-slate-300 text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
-                                <td className="p-0 border-r border-slate-300"><input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok seçin/yazın" className="w-full px-2 py-1 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" disabled={!isYonetici && !isPlasiyer} /></td>
-                                <td className="p-0 border-r border-slate-300"><input type="number" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" disabled={!isYonetici && !isPlasiyer} /></td>
-                                <td className="p-0 border-r border-slate-300"><input type="number" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1 text-[11px] font-bold text-right text-blue-700 outline-none bg-transparent focus:bg-white" disabled={!isYonetici && !isPlasiyer} /></td>
-                                <td className="p-1.5 border-r border-slate-300 text-right text-[11px] font-bold text-slate-900">{(item.miktar * item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                {(isYonetici || isPlasiyer) && (
-                                    <td className="p-1 text-center print:hidden"><button onClick={() => setSiparisKalemleri(siparisKalemleri.filter((_, i) => i !== index))} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>
-                                )}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {(isYonetici || isPlasiyer) && (!seciliSiparis || seciliSiparis?.durum === 'YENI' || seciliSiparis?.durum === 'HAZIRLANIYOR') && (
-                    <button onClick={urunSatiriEkle} className="mt-2 text-[10px] font-bold text-blue-600 hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Satır Ekle</button>
-                )}
-            </div>
-
-            <div className="bg-slate-200 border-t border-slate-300 p-4 flex justify-between items-end shrink-0 print:bg-white print:border-black print:border-t-2">
-                <div className="space-x-2 print:hidden">
-                    {(isYonetici || isPlasiyer) && (!seciliSiparis || seciliSiparis?.durum === 'YENI' || seciliSiparis?.durum === 'HAZIRLANIYOR') && (
-                        <>
-                            <button onClick={() => kaydetVeGonder("HAZIRLANIYOR")} className="px-4 py-2 bg-white border border-slate-400 text-slate-700 font-bold text-xs rounded hover:bg-slate-50 shadow-sm"><i className="fas fa-save mr-2"></i>Fişi Kaydet (Hazırlanıyor)</button>
-                            <button onClick={() => kaydetVeGonder("ONAY_BEKLIYOR")} className="px-4 py-2 bg-[#000080] border border-[#000050] text-white font-bold text-xs rounded hover:bg-blue-800 shadow-sm"><i className="fas fa-check-double mr-2"></i>Müşteri Onayına Gönder (Bakiye İşle)</button>
-                        </>
-                    )}
+            {/* --- GÜNCELLENMİŞ EKSİKSİZ SOL MENÜ --- */}
+            <aside className={`w-56 bg-slate-900 text-slate-300 flex flex-col shrink-0 text-sm border-r border-slate-800 print:hidden fixed md:static inset-y-0 left-0 z-50 transition-transform duration-300 ease-out ${mobilMenuAcik ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
+                <div className="h-16 flex flex-col items-center justify-center border-b border-slate-700 bg-slate-950 font-black text-white tracking-widest px-2 text-center relative">
+                    <span className="text-orange-500 text-[10px] uppercase mb-0.5">{isYonetici ? 'Sistem Yöneticisi' : 'Personel Hesabı'}</span>
+                    <span className="text-xs truncate w-full">{aktifSirket?.isletme_adi}</span>
+                    <button onClick={() => setMobilMenuAcik(false)} className="md:hidden absolute right-4 text-slate-400 hover:text-white"><i className="fas fa-times text-lg"></i></button>
                 </div>
                 
-                <div className="bg-white border border-slate-400 p-2 rounded shadow-inner w-64">
-                    <div className="flex justify-between items-center border-b border-slate-200 pb-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Ara Toplam</span>
-                        <span className="text-xs font-bold text-slate-700">{siparisKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-xs font-black text-slate-800 uppercase">Genel Toplam</span>
-                        <span className="text-lg font-black text-[#000080]">{siparisKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
-                    </div>
+                <nav className="flex-1 py-4 space-y-1 overflow-y-auto custom-scrollbar">
+                    {aktifSirket?.rol === "TOPTANCI" ? (
+                        <>
+                            {isYonetici ? <Link href="/dashboard" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/dashboard" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-chart-pie w-6"></i> Ana Sayfa</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500" title="Yetkiniz yok"><i className="fas fa-chart-pie w-6"></i> Ana Sayfa <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isPlasiyer || isDepocu ? <Link href="/pos" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/pos" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            
+                            {/* AKTİF SAYFA BURASI (Siparişler Fiş) */}
+                            {isYonetici || isPlasiyer || isDepocu ? <Link href="/" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-th-large w-6 text-blue-400"></i> Siparişler (Fiş)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-th-large w-6"></i> Siparişler (Fiş) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            
+                            {isYonetici || isMuhasebe ? <Link href="/tahsilat" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/tahsilat" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-money-bill-wave w-6"></i> Tahsilat / Ödeme</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-money-bill-wave w-6"></i> Tahsilat / Ödeme <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isMuhasebe ? <Link href="/faturalar" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/faturalar" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-file-invoice w-6"></i> Faturalar</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-file-invoice w-6"></i> Faturalar <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isDepocu ? <Link href="/stok" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-box w-6"></i> Stok Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-box w-6"></i> Stok Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isDepocu ? <Link href="/stok-hareketleri" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok-hareketleri" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isPlasiyer || isMuhasebe ? <Link href="/cari" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/cari" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-users w-6"></i> Cari Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-users w-6"></i> Cari Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                            {isYonetici || isMuhasebe ? <Link href="/ekstre" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/ekstre" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                        </>
+                    ) : (
+                        <Link href="/portal/pos" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/pos" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link>
+                    )}
+                </nav>
+                <div className="p-4 border-t border-slate-800 space-y-2 shrink-0">
+                    {isYonetici ? <Link href="/ayarlar" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-2 py-2 transition w-full text-xs uppercase tracking-widest rounded ${pathname === "/ayarlar" ? "bg-slate-800 text-white" : "text-slate-300 hover:text-white"}`}><i className="fas fa-cog w-6"></i> Ayarlar</Link> : <div className="flex items-center px-2 py-2 opacity-40 cursor-not-allowed text-slate-500" title="Yetkiniz yok"><i className="fas fa-cog w-6"></i> Ayarlar <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
+                    <button onClick={cikisYap} className="flex items-center px-2 py-2 hover:text-red-400 text-slate-500 transition w-full text-xs uppercase tracking-widest text-left"><i className="fas fa-sign-out-alt w-6"></i> Çıkış Yap</button>
                 </div>
-            </div>
-          </div>
+            </aside>
+
+            {/* --- ANA EKRAN İÇERİĞİ (Orijinal Sipariş Listesi Tasarımı) --- */}
+            <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white relative w-full">
+                
+                <div className="md:hidden bg-white border-b border-slate-200 p-3 flex justify-between items-center shrink-0">
+                    <h1 className="font-bold text-slate-800 text-sm"><i className="fas fa-th-large text-blue-600 mr-2"></i>Siparişler (Fiş)</h1>
+                    <button onClick={() => setMobilMenuAcik(true)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-600 rounded border border-slate-300"><i className="fas fa-bars"></i></button>
+                </div>
+
+                {!(isYonetici || isPlasiyer || isDepocu) ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 animate-in zoom-in-95 duration-500">
+                        <div className="w-32 h-32 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner border-4 border-white"><i className="fas fa-lock"></i></div>
+                        <h1 className="text-3xl font-black text-slate-800 mb-2">Erişim Engellendi</h1>
+                        <p className="text-slate-500 font-bold max-w-md mx-auto">Siparişler sayfasına erişim yetkiniz bulunmamaktadır.</p>
+                    </div>
+                ) : (
+                    <>
+                        {/* 1. SATIR: TOOLBAR (Araç Çubuğu) */}
+                        <div className="h-14 bg-slate-100 border-b border-slate-300 flex items-center px-4 space-x-2 shrink-0 print:hidden overflow-x-auto custom-scrollbar">
+                            <button onClick={() => alert("Yeni sipariş ekranı eklenecek.")} className="flex items-center px-4 py-1.5 bg-emerald-600 border border-emerald-700 text-white rounded hover:bg-emerald-700 text-xs font-bold shadow-sm whitespace-nowrap">
+                                <i className="fas fa-plus mr-2"></i> Yeni Sipariş Ekle
+                            </button>
+                            <button onClick={() => { if(!seciliSiparisId) alert("Lütfen incelemek için bir fiş seçin."); else alert("İnceleme/Düzenleme ekranı açılacak."); }} className="flex items-center px-4 py-1.5 bg-white border border-slate-300 rounded hover:bg-blue-50 text-blue-600 text-xs font-bold shadow-sm whitespace-nowrap">
+                                <i className="fas fa-edit mr-2"></i> İncele / Düzelt
+                            </button>
+                            <button onClick={siparisSil} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-red-50 text-red-600 text-xs font-bold shadow-sm whitespace-nowrap">
+                                <i className="fas fa-trash-alt mr-2"></i> Sil
+                            </button>
+                            <button onClick={() => alert("İşlem menüsü açılacak.")} className="flex items-center px-4 py-1.5 bg-blue-500 border border-blue-600 text-white rounded hover:bg-blue-600 text-xs font-bold shadow-sm whitespace-nowrap ml-2">
+                                <i className="fas fa-check-circle mr-2"></i> İşlem
+                            </button>
+                            <button onClick={() => window.print()} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-sm whitespace-nowrap">
+                                <i className="fas fa-print mr-2"></i> Yazdır
+                            </button>
+                        </div>
+
+                        {/* 2. SATIR: ARAMA VE BAŞLIK ÇUBUĞU */}
+                        <div className="h-12 bg-slate-200 border-b border-slate-300 flex items-center px-4 shrink-0 space-x-6 print:hidden">
+                            <span className="text-xs font-bold text-slate-600 uppercase tracking-widest hidden sm:block">SİPARİŞ FİŞLERİ</span>
+                            <div className="flex-1 max-w-lg relative">
+                                <input type="text" placeholder="Fiş No veya Cari Ünvanı ile arama yapın..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="w-full text-xs px-3 py-1.5 border border-slate-300 rounded shadow-inner outline-none focus:border-blue-500" />
+                                <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            </div>
+                        </div>
+
+                        {/* 3. SATIR: TABLO (GRID) ALANI */}
+                        <div className="flex-1 overflow-auto bg-white relative print:hidden">
+                            <table className="w-full text-left border-collapse whitespace-nowrap min-w-[800px]">
+                                <thead className="bg-slate-100 border-b-2 border-slate-300 sticky top-0 z-10 shadow-sm">
+                                    <tr className="text-[11px] font-bold text-slate-700">
+                                        <th className="p-2 border-r border-slate-300 w-8 text-center"><i className="fas fa-caret-down text-slate-400"></i></th>
+                                        <th className="p-2 border-r border-slate-300 w-32">Belge / Fiş No</th>
+                                        <th className="p-2 border-r border-slate-300">Cari Adı (Müşteri)</th>
+                                        <th className="p-2 border-r border-slate-300 w-48 text-right">Durum</th>
+                                        <th className="p-2 w-32 text-right">Tutar (TL)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {yukleniyor ? (
+                                        <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                                    ) : filtrelenmisSiparisler.length === 0 ? (
+                                        <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Sipariş Bulunamadı</td></tr>
+                                    ) : (
+                                        filtrelenmisSiparisler.map((s) => {
+                                            const isSelected = seciliSiparisId === s.id;
+                                            return (
+                                                <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} className={`text-[11px] font-medium border-b border-slate-200 cursor-pointer select-none ${isSelected ? 'bg-[#000080] text-white' : 'hover:bg-slate-50 bg-white text-slate-800'}`}>
+                                                    <td className="p-2 border-r border-slate-200 text-center">
+                                                        {isSelected ? <i className="fas fa-caret-right text-white"></i> : <i className="fas fa-caret-down text-transparent"></i>}
+                                                    </td>
+                                                    <td className={`p-2 border-r border-slate-200 ${isSelected ? 'text-white' : 'text-slate-600'}`}>{s.siparis_no}</td>
+                                                    <td className={`p-2 border-r border-slate-200 ${isSelected ? 'text-white' : 'text-slate-800'}`}>{s.cari_adi}</td>
+                                                    
+                                                    {/* DURUM RENKLENDİRMESİ */}
+                                                    <td className={`p-2 border-r border-slate-200 text-right ${isSelected ? 'text-white' : getDurumRengi(s.durum)}`}>{s.durum}</td>
+                                                    
+                                                    {/* TUTAR */}
+                                                    <td className={`p-2 text-right font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                                        {parseTutar(s.toplam_tutar).toLocaleString('tr-TR', {minimumFractionDigits: 2})}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                )}
+            </main>
         </div>
-      )}
-    </div>
-  );
+    );
 }
