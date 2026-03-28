@@ -1,18 +1,15 @@
 "use client";
 import { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-// SUPABASE AYARLARI
-const SUPABASE_URL = "https://phvtklkcgmnqnscmymxr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBodnRrbGtjZ21ucW5zY215bXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTY3NDAsImV4cCI6MjA4Nzk3Mjc0MH0.JBt2MfJsFmr7j2Kd0-O_YbLtUzDIBGPQt8hODfYhRbc";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from "@/app/lib/supabase";
+import { useToast } from "@/app/lib/toast";
 
 export default function LandingAndLogin() {
   const [aktifModal, setAktifModal] = useState<'TOPTANCI' | 'PERAKENDE' | null>(null);
 
   return (
-    <div className="min-h-screen bg-[#0B1120] text-white relative font-sans selection:bg-blue-500 selection:text-white overflow-x-hidden">
-        
+    <div className="fixed inset-0 bg-[#0B1120] text-white font-sans selection:bg-blue-500 selection:text-white">
+      <div className="h-full overflow-y-auto overflow-x-hidden">
+
         {/* --- ARKA PLAN GLOW EFEKTLERİ --- */}
         <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
             <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-cyan-600/10 rounded-full blur-[120px]"></div>
@@ -35,7 +32,7 @@ export default function LandingAndLogin() {
                 </button>
                 <button onClick={() => setAktifModal('TOPTANCI')} className="group relative flex items-center px-4 py-2 md:px-6 md:py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-full transition-all duration-300 shadow-[0_0_15px_rgba(249,115,22,0.4)]">
                     <i className="fas fa-building text-orange-50 mr-2 group-hover:scale-110 transition-transform"></i>
-                    <span className="text-[10px] md:text-sm font-black text-white">Toptancı Girişi</span>
+                    <span className="text-[10px] md:text-sm font-black text-white">Satıcı / Toptancı Girişi</span>
                 </button>
             </div>
         </header>
@@ -54,12 +51,12 @@ export default function LandingAndLogin() {
                 </div>
                 
                 <h2 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-6">
-                    Toptan Ticaretin <br className="hidden md:block" />
+                    B2B Ticaretin <br className="hidden md:block" />
                     <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500">Dijital Gücüyle</span> Tanışın.
                 </h2>
-                
+
                 <p className="text-lg md:text-xl text-slate-400 font-medium max-w-3xl mx-auto leading-relaxed mb-10">
-                    Toptancılar için ağır abi bir ERP, marketler için saniyeler içinde sipariş geçebilecekleri şık bir B2B portalı. Resmi muhasebenizi ve e-belgelerinizi tek bir platformdan, dünyanın her yerinden yönetin.
+                    Satıcılar için güçlü ERP altyapısı, alıcılar için hızlı ve kolay B2B sipariş portalı. Resmi muhasebenizi ve e-belgelerinizi tek bir platformdan, dünyanın her yerinden yönetin.
                 </p>
 
                 <button onClick={() => setAktifModal('TOPTANCI')} className="px-8 py-4 bg-white text-slate-900 font-black text-sm uppercase tracking-widest rounded-full shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:scale-105 transition-transform">
@@ -71,14 +68,14 @@ export default function LandingAndLogin() {
             <div className="w-full mb-32">
                 <div className="text-center mb-12">
                     <h3 className="text-3xl font-black text-white mb-4">Neden Durmaz SaaS?</h3>
-                    <p className="text-slate-400">İşletmenizi bir üst seviyeye taşıyacak modern altyapı.</p>
+                    <p className="text-slate-400">Her sektörden satıcı ve alıcı için B2B sipariş ve yönetim platformu.</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="bg-slate-800/30 border border-slate-700/50 p-8 rounded-3xl backdrop-blur-sm hover:bg-slate-800/60 transition-colors group">
                         <div className="w-14 h-14 bg-cyan-500/20 text-cyan-400 rounded-2xl flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform"><i className="fas fa-shopping-basket"></i></div>
                         <h4 className="text-lg font-black text-white mb-2">B2B Müşteri Portalı</h4>
-                        <p className="text-sm text-slate-400 leading-relaxed">Müşterileriniz size WhatsApp'tan yazmasın. Kendi portalınızdan güncel fiyatlarla 7/24 sipariş geçsinler.</p>
+                        <p className="text-sm text-slate-400 leading-relaxed">Müşterileriniz size WhatsApp&apos;tan yazmasın. Kendi portalınızdan güncel fiyatlarla 7/24 sipariş geçsinler.</p>
                     </div>
 
                     <div className="bg-slate-800/30 border border-slate-700/50 p-8 rounded-3xl backdrop-blur-sm hover:bg-slate-800/60 transition-colors group">
@@ -90,7 +87,7 @@ export default function LandingAndLogin() {
                     <div className="bg-slate-800/30 border border-slate-700/50 p-8 rounded-3xl backdrop-blur-sm hover:bg-slate-800/60 transition-colors group">
                         <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform"><i className="fas fa-chart-line"></i></div>
                         <h4 className="text-lg font-black text-white mb-2">Dinamik Cari Ekstre</h4>
-                        <p className="text-sm text-slate-400 leading-relaxed">Hangi marketin ne kadar borcu var? Yürüyen bakiye sistemi ile tahsilatlarınızı sıfır hatayla takip edin.</p>
+                        <p className="text-sm text-slate-400 leading-relaxed">Hangi müşterinin ne kadar borcu var? Yürüyen bakiye sistemi ile tahsilatlarınızı sıfır hatayla takip edin.</p>
                     </div>
 
                     <div className="bg-slate-800/30 border border-slate-700/50 p-8 rounded-3xl backdrop-blur-sm hover:bg-slate-800/60 transition-colors group">
@@ -130,7 +127,7 @@ export default function LandingAndLogin() {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
                 <AuthCard 
                     rol={aktifModal} 
-                    baslik={aktifModal === 'TOPTANCI' ? "Toptancı Yönetimi" : "Müşteri Portalı"} 
+                    baslik={aktifModal === 'TOPTANCI' ? "Satıcı Yönetim Paneli" : "Müşteri Portalı"}
                     altBaslik="Resmi Ticari Hesap İşlemleri"
                     tema={aktifModal === 'TOPTANCI' ? 'orange' : 'cyan'}
                     icon={aktifModal === 'TOPTANCI' ? "fas fa-building" : "fas fa-store"}
@@ -138,6 +135,7 @@ export default function LandingAndLogin() {
                 />
             </div>
         )}
+      </div>
     </div>
   );
 }
@@ -146,12 +144,49 @@ export default function LandingAndLogin() {
 // KİMLİK DOĞRULAMA VE E-FATURA UYUMLU KAYIT FORMU (PERSONEL MANTIKLI)
 // =========================================================================
 
+// --- BRUTE FORCE KORUMASI ---
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 60_000; // 1 dakika
+
+function getLoginAttempts(): { count: number; lockedUntil: number } {
+    try {
+        const raw = sessionStorage.getItem("_login_attempts");
+        if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return { count: 0, lockedUntil: 0 };
+}
+
+function recordLoginAttempt(success: boolean) {
+    if (success) {
+        sessionStorage.removeItem("_login_attempts");
+        return;
+    }
+    const state = getLoginAttempts();
+    state.count += 1;
+    if (state.count >= LOGIN_MAX_ATTEMPTS) {
+        state.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+    }
+    sessionStorage.setItem("_login_attempts", JSON.stringify(state));
+}
+
+function isLoginLocked(): { locked: boolean; remainingSec: number } {
+    const state = getLoginAttempts();
+    if (state.lockedUntil > Date.now()) {
+        return { locked: true, remainingSec: Math.ceil((state.lockedUntil - Date.now()) / 1000) };
+    }
+    if (state.lockedUntil > 0 && state.lockedUntil <= Date.now()) {
+        sessionStorage.removeItem("_login_attempts");
+    }
+    return { locked: false, remainingSec: 0 };
+}
+
 function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, baslik: string, altBaslik: string, tema: 'cyan' | 'orange', icon: string, kapat: () => void }) {
+    const toast = useToast();
     const [isKayit, setIsKayit] = useState(false);
     const [yukleniyor, setYukleniyor] = useState(false);
 
     // Form State'leri
-    const [eposta, setEposta] = useState(""); 
+    const [eposta, setEposta] = useState("");
     const [sifre, setSifre] = useState("");
     const [telefon, setTelefon] = useState("");
     const [isletmeAdi, setIsletmeAdi] = useState(""); 
@@ -161,6 +196,7 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
     const [il, setIl] = useState("");
     const [ilce, setIlce] = useState("");
     const [adres, setAdres] = useState("");
+    const [sektor, setSektor] = useState("");
 
     const renkler = {
         cyan: {
@@ -180,81 +216,135 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
         setYukleniyor(true);
 
         if (isKayit) {
-            // KAYIT İŞLEMİ (Sadece Şirket / Patronlar için)
-            if (!eposta || !isletmeAdi || !unvan || !telefon || !sifre || !vergiNo || !vergiDairesi || !il || !adres) { 
-                alert("Lütfen E-Fatura için gerekli tüm zorunlu alanları doldurun!"); 
-                setYukleniyor(false); 
-                return; 
+            // === KAYIT İŞLEMİ (Supabase Auth + Şirket Kaydı) ===
+            if (!eposta || !isletmeAdi || !unvan || !telefon || !sifre || !vergiNo || !vergiDairesi || !il || !adres) {
+                toast.error("Lütfen E-Fatura için gerekli tüm zorunlu alanları doldurun!");
+                setYukleniyor(false);
+                return;
             }
-            
-            const yeniSirket = { 
-                eposta: eposta.toLowerCase(), 
-                isletme_adi: isletmeAdi, unvan, telefon, sifre, rol, 
-                vergi_no: vergiNo, vergi_dairesi: vergiDairesi, il, ilce, adres
+            if (sifre.length < 8) {
+                toast.error("Şifre en az 8 karakter olmalıdır!");
+                setYukleniyor(false);
+                return;
+            }
+
+            // 1. Supabase Auth ile kullanıcı oluştur
+            const { error: authError } = await supabase.auth.signUp({
+                email: eposta.toLowerCase(),
+                password: sifre,
+            });
+
+            if (authError) {
+                toast.error("Kayıt hatası: " + authError.message);
+                setYukleniyor(false);
+                return;
+            }
+
+            // 2. Şirket kaydını oluştur
+            const yeniSirket = {
+                eposta: eposta.toLowerCase(),
+                isletme_adi: isletmeAdi, unvan, telefon, rol,
+                vergi_no: vergiNo, vergi_dairesi: vergiDairesi, il, ilce, adres,
+                sektor: sektor || "Diğer"
             };
 
             const { data, error } = await supabase.from("sirketler").insert([yeniSirket]).select().single();
-            if (error) { alert("Kayıt sırasında hata: E-posta adresi kullanılıyor olabilir."); setYukleniyor(false); return; }
-            
+            if (error) { toast.error("Şirket kaydı hatası: E-posta adresi kullanılıyor olabilir."); setYukleniyor(false); return; }
+
+            // 3. Otomatik giriş yap
+            const { error: loginError } = await supabase.auth.signInWithPassword({ email: eposta.toLowerCase(), password: sifre });
+            if (loginError) {
+                toast.success("Kayıt başarılı! Lütfen giriş yapın.");
+                setIsKayit(false);
+                setYukleniyor(false);
+                return;
+            }
+
             localStorage.setItem("aktifSirket", JSON.stringify(data));
             localStorage.setItem("aktifKullanici", JSON.stringify({ ad_soyad: "Sistem Yöneticisi", rol: "YONETICI" }));
-            window.location.href = rol === "TOPTANCI" ? "/" : "/portal";
+            window.location.href = rol === "TOPTANCI" ? "/dashboard" : "/portal";
 
         } else {
-            // GİRİŞ İŞLEMİ (YENİ: HEM PATRON HEM PERSONEL KONTROLÜ)
-            if (!eposta || !sifre) { alert("E-posta adresi ve şifre giriniz!"); setYukleniyor(false); return; }
-            
-            // 1. Önce PATRON (Şirket) Mu Diye Bakıyoruz
+            // === GİRİŞ İŞLEMİ (Supabase Auth + Veritabanı Rol Eşleşme) ===
+            if (!eposta || !sifre) { toast.error("E-posta adresi ve şifre giriniz!"); setYukleniyor(false); return; }
+
+            // Brute force kontrolü
+            const lockStatus = isLoginLocked();
+            if (lockStatus.locked) {
+                toast.error(`Çok fazla hatalı deneme! ${lockStatus.remainingSec} saniye bekleyin.`);
+                setYukleniyor(false);
+                return;
+            }
+
+            // 1. Supabase Auth ile giriş yap
+            const { error: authError } = await supabase.auth.signInWithPassword({
+                email: eposta.toLowerCase(),
+                password: sifre,
+            });
+
+            if (authError) {
+                recordLoginAttempt(false);
+                const newLock = isLoginLocked();
+                if (newLock.locked) {
+                    toast.error(`Çok fazla hatalı deneme! ${newLock.remainingSec} saniye bekleyin.`);
+                } else {
+                    const attemptsLeft = LOGIN_MAX_ATTEMPTS - getLoginAttempts().count;
+                    toast.error(`Hatalı E-Posta veya Şifre! (${attemptsLeft} deneme hakkı kaldı)`);
+                }
+                setYukleniyor(false);
+                return;
+            }
+
+            // Başarılı giriş - sayacı sıfırla
+            recordLoginAttempt(true);
+
+            // 2. Kullanıcıyı veritabanında bul (patron mu personel mi?)
             const { data: sirketData } = await supabase.from("sirketler")
                 .select("*")
                 .eq("eposta", eposta.toLowerCase())
-                .eq("sifre", sifre)
                 .single();
-                
+
             if (sirketData) {
-                // Patron bulundu
-                if (sirketData.rol !== rol) { 
-                    alert(`Bu hesap ${sirketData.rol} hesabıdır. Lütfen diğer taraftaki butondan giriş yapın!`); 
-                    setYukleniyor(false); 
-                    return; 
+                if (sirketData.rol !== rol) {
+                    toast.error(`Bu hesap ${sirketData.rol} hesabıdır. Lütfen diğer taraftaki butondan giriş yapın!`);
+                    await supabase.auth.signOut();
+                    setYukleniyor(false);
+                    return;
                 }
                 localStorage.setItem("aktifSirket", JSON.stringify(sirketData));
                 localStorage.setItem("aktifKullanici", JSON.stringify({ ad_soyad: sirketData.isletme_adi, rol: "YONETICI" }));
-                window.location.href = rol === "TOPTANCI" ? "/" : "/portal";
+                window.location.href = rol === "TOPTANCI" ? "/dashboard" : "/portal";
                 return;
             }
 
-            // 2. Patron Değilse PERSONEL (Alt Kullanıcı) Mi Diye Bakıyoruz
-            // Personel ise, bağlı olduğu şirket bilgisini de "sirketler(*)" ile çekiyoruz!
+            // 3. Personel kontrolü
             const { data: personelData } = await supabase.from("alt_kullanicilar")
                 .select("*, sirketler(*)")
                 .eq("eposta", eposta.toLowerCase())
-                .eq("sifre", sifre)
                 .single();
 
-            if (personelData && personelData.sirketler) {
-                // Personel bulundu
+            if (personelData?.sirketler) {
                 if (personelData.durum !== "AKTIF") {
-                    alert("Hesabınız yöneticiniz tarafından pasife alınmış. Lütfen iletişime geçin.");
+                    toast.error("Hesabınız yöneticiniz tarafından pasife alınmış.");
+                    await supabase.auth.signOut();
                     setYukleniyor(false);
                     return;
                 }
-
                 if (personelData.sirketler.rol !== rol) {
-                    alert(`Bağlı olduğunuz firma ${personelData.sirketler.rol} firmasıdır. Lütfen doğru kapıdan giriş yapın!`);
+                    toast.error(`Bağlı olduğunuz firma ${personelData.sirketler.rol} firmasıdır. Lütfen doğru kapıdan giriş yapın!`);
+                    await supabase.auth.signOut();
                     setYukleniyor(false);
                     return;
                 }
-
-                // Başarılı Personel Girişi
-                localStorage.setItem("aktifSirket", JSON.stringify(personelData.sirketler)); // Ana firma bilgisi
-                localStorage.setItem("aktifKullanici", JSON.stringify(personelData)); // Personelin kendi yetki bilgileri
-                window.location.href = rol === "TOPTANCI" ? "/" : "/portal";
+                localStorage.setItem("aktifSirket", JSON.stringify(personelData.sirketler));
+                localStorage.setItem("aktifKullanici", JSON.stringify(personelData));
+                window.location.href = rol === "TOPTANCI" ? "/dashboard" : "/portal";
                 return;
             }
 
-            // 3. Hiçbiri Değilse Hata Ver
-            alert("Hatalı E-Posta veya Şifre girdiniz!"); 
+            // 4. Veritabanında eşleşme yok
+            toast.error("Hesabınız bir şirketle eşleşmiyor. Lütfen yöneticinizle iletişime geçin.");
+            await supabase.auth.signOut();
             setYukleniyor(false);
         }
     };
@@ -353,6 +443,22 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                                 <div>
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">İletişim Telefonu <span className="text-red-500">*</span></label>
                                     <input type="tel" value={telefon} onChange={(e) => setTelefon(e.target.value)} placeholder="05XX XXX XX XX" className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Sektör</label>
+                                    <select value={sektor} onChange={(e) => setSektor(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`}>
+                                        <option value="">-- Sektör Seçiniz --</option>
+                                        <option value="Gıda">Gıda &amp; İçecek</option>
+                                        <option value="Tekstil">Tekstil &amp; Konfeksiyon</option>
+                                        <option value="Elektronik">Elektronik &amp; Teknoloji</option>
+                                        <option value="Kozmetik">Kozmetik &amp; Kişisel Bakım</option>
+                                        <option value="Kırtasiye">Kırtasiye &amp; Ofis</option>
+                                        <option value="İnşaat">İnşaat Malzemeleri</option>
+                                        <option value="Oto Yedek Parça">Oto Yedek Parça</option>
+                                        <option value="Mobilya">Mobilya &amp; Dekorasyon</option>
+                                        <option value="Tarım">Tarım &amp; Hayvancılık</option>
+                                        <option value="Diğer">Diğer</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Sisteme Giriş Şifresi <span className="text-red-500">*</span></label>

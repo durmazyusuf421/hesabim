@@ -1,0 +1,24 @@
+{
+  "name": "Durmaz B2B - Ticaret Ağı",
+  "short_name": "B2B",
+  "description": "B2B Sipariş ve İşletme Yönetim Platformu",
+  "start_url": "/login",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#f1f5f9",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

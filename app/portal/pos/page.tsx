@@ -1,17 +1,13 @@
 "use client";
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-
-// SUPABASE AYARLARI
-const SUPABASE_URL = "https://phvtklkcgmnqnscmymxr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBodnRrbGtjZ21ucW5zY215bXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTY3NDAsImV4cCI6MjA4Nzk3Mjc0MH0.JBt2MfJsFmr7j2Kd0-O_YbLtUzDIBGPQt8hODfYhRbc";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/useAuth";
+import { useToast } from "@/app/lib/toast";
 
 export default function PosEkrani() {
-  const pathname = usePathname();
-  const [aktifSirket, setAktifSirket] = useState<any>(null);
+  const { aktifSirket, kullanici } = useAuth();
+  const toast = useToast();
   const [kullaniciAdi, setKullaniciAdi] = useState<string>("");
 
   // VERİTABANI STATELERİ
@@ -31,20 +27,12 @@ export default function PosEkrani() {
   const barkodInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const sirketStr = localStorage.getItem("aktifSirket");
-    const kullaniciStr = localStorage.getItem("aktifKullanici");
-    if (!sirketStr) { window.location.href = "/login"; return; }
-    
-    const sirket = JSON.parse(sirketStr);
-    const kullanici = kullaniciStr ? JSON.parse(kullaniciStr) : { ad_soyad: "Kasiyer" };
-    if (sirket.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
-    
-    setAktifSirket(sirket);
-    setKullaniciAdi(kullanici.ad_soyad);
-    verileriGetir(sirket.id);
-
+    if (!aktifSirket) return;
+    if (aktifSirket.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
+    setKullaniciAdi(kullanici?.ad_soyad || "Kasiyer");
+    verileriGetir(aktifSirket.id);
     barkodInputRef.current?.focus();
-  }, []);
+  }, [aktifSirket, kullanici]);
 
   async function verileriGetir(sirketId: number) {
       const { data: uData } = await supabase.from("urunler").select("*").eq("sahip_sirket_id", sirketId).order('urun_adi');
@@ -65,7 +53,7 @@ export default function PosEkrani() {
           if (urun) {
               sepeteEkle(urun);
           } else {
-              alert("Ürün / Barkod bulunamadı! Manuel aramayı kullanabilirsiniz.");
+              toast.error("Ürün / Barkod bulunamadı! Manuel aramayı kullanın.");
           }
           setBarkodGirdisi("");
           barkodInputRef.current?.focus();
@@ -121,14 +109,14 @@ export default function PosEkrani() {
 
   // ÖDEME İŞLEMİ (VERİTABANINA YAZMA)
   const odemeAl = async (odemeTipi: "NAKIT" | "KREDI_KARTI" | "VERESIYE") => {
-      if (sepet.length === 0) return alert("Sepette ürün yok!");
-      if (odemeTipi === "VERESIYE" && !seciliMusteriId) return alert("Veresiye işlem için sağ menüden müşteri seçmelisiniz!");
+      if (sepet.length === 0) { toast.error("Sepette ürün yok!"); return; }
+      if (odemeTipi === "VERESIYE" && !seciliMusteriId) { toast.error("Veresiye için müşteri seçin!"); return; }
       
       setIslemYapiliyor(true);
 
       try {
           const { data: satisData, error: satisError } = await supabase.from("perakende_satislar").insert([{
-              sirket_id: aktifSirket.id, musteri_id: seciliMusteriId ? Number(seciliMusteriId) : null,
+              sirket_id: aktifSirket!.id, musteri_id: seciliMusteriId ? Number(seciliMusteriId) : null,
               odeme_tipi: odemeTipi, toplam_tutar: genelToplam, islem_yapan: kullaniciAdi
           }]).select().single();
 
@@ -151,7 +139,7 @@ export default function PosEkrani() {
           // Kasaya veya Veresiye Defterine İşle
           if (odemeTipi === "NAKIT" || odemeTipi === "KREDI_KARTI") {
               await supabase.from("kasa_islemleri").insert([{
-                  sirket_id: aktifSirket.id, islem_tipi: 'GELIR', kategori: 'Perakende Satış',
+                  sirket_id: aktifSirket!.id, islem_tipi: 'GELIR', kategori: 'Perakende Satış',
                   tutar: genelToplam, aciklama: `POS Satışı (#${satisData.id}) - ${odemeTipi === 'NAKIT' ? 'Nakit' : 'Kredi Kartı'}`, islem_yapan: kullaniciAdi
               }]);
           } else if (odemeTipi === "VERESIYE") {
@@ -163,40 +151,18 @@ export default function PosEkrani() {
               await supabase.from("veresiye_musteriler").update({ bakiye: Number(musteri.bakiye) + genelToplam }).eq("id", musteri.id);
           }
 
-          setSepet([]); setSeciliMusteriId(""); verileriGetir(aktifSirket.id); barkodInputRef.current?.focus();
-      } catch (error: any) { alert(error.message); } finally { setIslemYapiliyor(false); }
+          setSepet([]); setSeciliMusteriId(""); verileriGetir(aktifSirket!.id); barkodInputRef.current?.focus();
+      } catch (error: unknown) { toast.error(error instanceof Error ? error.message : "Hata oluştu"); } finally { setIslemYapiliyor(false); }
   };
 
   const filtrelenmisUrunler = urunler.filter(u => u.urun_adi.toLowerCase().includes(urunAramaTerimi.toLowerCase()) || (u.barkod && u.barkod.includes(urunAramaTerimi)));
-  const cikisYap = () => { localStorage.removeItem("aktifSirket"); localStorage.removeItem("aktifKullanici"); window.location.href = "/login"; };
 
-  if (!aktifSirket) return <div className="h-screen flex items-center justify-center bg-slate-100 font-bold text-slate-500">Yükleniyor...</div>;
+  if (!aktifSirket) return <div className="h-full flex items-center justify-center font-semibold text-[#64748b]" style={{ background: "var(--c-bg)" }}>Yükleniyor...</div>;
 
   return (
-    <div className="bg-[#f4f7f6] font-sans h-screen flex overflow-hidden text-slate-800">
-      
-      {/* SOL MENÜ (SaaS PROJE BÜTÜNLÜĞÜ BOZULMADI) */}
-      <aside className="w-56 bg-slate-900 text-slate-300 flex flex-col shrink-0 text-sm border-r border-slate-800 print:hidden shadow-xl z-20">
-        <div className="h-16 flex flex-col items-center justify-center border-b border-slate-700 bg-slate-950 font-black text-white tracking-widest px-2 text-center">
-            <span className="text-cyan-500 text-[10px] uppercase mb-0.5">Market POS</span>
-            <span className="text-xs truncate w-full">{aktifSirket.isletme_adi}</span>
-        </div>
-        <nav className="flex-1 py-4 space-y-1">
-          <Link href="/portal/pos" className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/pos" ? "bg-slate-800 text-white border-l-4 border-cyan-500" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link>
-          <Link href="/stok" className={`flex items-center px-6 py-3 transition-all hover:bg-slate-800 hover:text-white border-l-4 border-transparent`}><i className="fas fa-box w-6"></i> Market Stokları</Link>
-          <Link href="/portal" className={`flex items-center px-6 py-3 transition-all hover:bg-slate-800 hover:text-white border-l-4 border-transparent`}><i className="fas fa-store w-6"></i> Toptan Sipariş</Link>
-          <Link href="/portal/siparisler" className={`flex items-center px-6 py-3 transition-all hover:bg-slate-800 hover:text-white border-l-4 border-transparent`}><i className="fas fa-list-alt w-6"></i> Siparişlerim</Link>
-          <Link href="/portal/kasa" className={`flex items-center px-6 py-3 transition-all hover:bg-slate-800 hover:text-white border-l-4 border-transparent`}><i className="fas fa-cash-register w-6"></i> Kasa & Nakit Akışı</Link>
-          <Link href="/portal/veresiye" className={`flex items-center px-6 py-3 transition-all hover:bg-slate-800 hover:text-white border-l-4 border-transparent`}><i className="fas fa-book w-6"></i> Veresiye Defteri</Link>
-        </nav>
-        <div className="p-4 border-t border-slate-800 space-y-2">
-          <Link href="/ayarlar" className={`flex items-center px-2 py-2 transition w-full text-xs uppercase tracking-widest rounded hover:text-white`}><i className="fas fa-cog w-6"></i> Ayarlar</Link>
-          <button onClick={cikisYap} className="flex items-center px-2 py-2 hover:text-red-400 text-slate-500 transition w-full text-xs uppercase tracking-widest"><i className="fas fa-sign-out-alt w-6"></i> Çıkış Yap</button>
-        </div>
-      </aside>
-
-      {/* ANA POS EKRANI (ÜÇLÜ MODERN YAPI) */}
-      <main className="flex-1 flex gap-4 p-4 h-screen overflow-hidden select-none">
+    <>
+      <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
+        <div className="flex-1 flex gap-4 p-4 overflow-hidden select-none">
           
           {/* SÜTUN 1: SEPET (SATIŞ FİŞİ) - MODERN & OKUNAKLI */}
           <div className="w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
@@ -367,9 +333,9 @@ export default function PosEkrani() {
               </Link>
           </div>
 
-      </main>
+        </div>
 
-      {/* --- YENİ EKLENEN: MANUEL ÜRÜN ARAMA MODALI --- */}
+      {/* --- MANUEL ÜRÜN ARAMA MODALI --- */}
       {aramaModalAcik && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden border border-slate-300 h-[85vh]">
@@ -425,6 +391,7 @@ export default function PosEkrani() {
           </div>
         </div>
       )}
-    </div>
+      </main>
+    </>
   );
 }

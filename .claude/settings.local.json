@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next:*)",
+      "Bash(npx eslint:*)",
+      "Bash(node -e \"const r=JSON.parse\\(require\\(''''fs''''\\).readFileSync\\(''''/dev/stdin'''',''''utf8''''\\)\\); r.forEach\\(f=>{f.messages.filter\\(m=>m.ruleId===''''react/no-unescaped-entities''''\\).forEach\\(m=>{console.log\\(f.filePath.split\\(''''muhasebe-pro/''''\\)[1]+'''':''''+m.line\\)}\\)}\\)\")",
+      "Bash(node -e \"process.stdin.on\\(''''data'''',d=>{const r=JSON.parse\\(d\\);r.forEach\\(f=>{f.messages.filter\\(m=>m.ruleId===''''react/no-unescaped-entities''''\\).forEach\\(m=>{console.log\\(f.filePath.replace\\(/\\\\/g,''''/''''\\).split\\(''''muhasebe-pro/''''\\)[1]+'''':''''+m.line+'''':''''+m.column\\)}\\)}\\)}\\)\")",
+      "Bash(node -e \"const r=require\\(''''./eslint-out.json''''\\);r.forEach\\(f=>{f.messages.filter\\(m=>m.message && m.message.includes\\(''''setState''''\\)\\).forEach\\(m=>{console.log\\(m.ruleId\\)}\\)}\\)\")",
+      "Bash(node -e \"const r=require\\(''''./eslint-out.json''''\\);r.forEach\\(f=>{f.messages.filter\\(m=>m.message&&m.message.includes\\(''''setState''''\\)\\).forEach\\(m=>{console.log\\(m.ruleId\\)}\\)}\\)\")",
+      "Bash(npm run:*)",
+      "Bash(node:*)",
+      "Bash(npx tsc:*)",
+      "Bash(find . -name *.sql -o -name *migration* -o -name *schema*)",
+      "Bash(grep -v \"//.*alert\")",
+      "Bash(npm install:*)",
+      "Bash(npm list:*)",
+      "Bash(ls:*)",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(echo \"Done: $f\")",
+      "Bash(done)",
+      "Bash(grep -r \"test\\\\|mock\\\\|dummy.*password\\\\|secret\" /c/Users/durma/OneDrive/Desktop/muhasebe-pro --include=*.ts --include=*.tsx --include=*.js -i)",
+      "Bash(grep -r \"token\\\\|Token\" C:UsersdurmaOneDriveDesktopmuhasebe-proapp --include=*.ts --include=*.tsx)",
+      "Bash(find app:*)",
+      "Bash(grep -r \"authorization\\\\|Authorization\\\\|Bearer\\\\|auth\\\\|token\" /c/Users/durma/OneDrive/Desktop/muhasebe-pro/app --include=*.tsx --include=*.ts -i)",
+      "Bash(grep -r \"password\\\\|secret\\\\|key\\\\|token\" /c/Users/durma/OneDrive/Desktop/muhasebe-pro/app --include=*.tsx --include=*.ts -n)",
+      "Bash(grep -r \"http\\\\|https\\\\|phvtklkcgmnqnscmymxr\\\\|supabase\" /c/Users/durma/OneDrive/Desktop/muhasebe-pro/app --include=*.tsx --include=*.ts -n)",
+      "Bash(for file:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/durma/OneDrive/Desktop/muhasebe-pro/**)",
+      "Bash(npm ls:*)",
+      "Bash(find /c/Users/durma/OneDrive/Desktop/muhasebe-pro -name *.sql -type f)",
+      "Bash(cp app/globals.css app/globals.css.bak)",
+      "Bash(cp app/layout.tsx app/layout.tsx.bak)",
+      "Bash(cp app/AppWrapper.tsx app/AppWrapper.tsx.bak)",
+      "Bash(cp app/dashboard/page.tsx app/dashboard/page.tsx.bak)"
+    ]
+  }
+}

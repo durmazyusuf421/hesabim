@@ -1,37 +1,39 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-
-// SUPABASE AYARLARI
-const SUPABASE_URL = "https://phvtklkcgmnqnscmymxr.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBodnRrbGtjZ21ucW5zY215bXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTY3NDAsImV4cCI6MjA4Nzk3Mjc0MH0.JBt2MfJsFmr7j2Kd0-O_YbLtUzDIBGPQt8hODfYhRbc";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// --- TİP TANIMLAMALARI (Kırmızı hataları önlemek için) ---
-interface Sirket { id: number; isletme_adi: string; rol: string; }
-interface Kullanici { ad_soyad: string; rol: string; }
+import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/useAuth";
+import { useToast } from "@/app/lib/toast";
 interface FaturaKalemi { urun_adi: string; miktar: number; birim: string; birim_fiyat: number; kdv_orani: number; }
 interface FaturaFormState { fatura_no: string; tarih: string; cari_id: string; }
+interface FaturaRecord {
+  id: number;
+  sirket_id: number;
+  cari_id: number;
+  fatura_no: string;
+  tip: "GELEN" | "GIDEN";
+  tarih: string;
+  ara_toplam: number;
+  kdv_toplam: number;
+  genel_toplam: number;
+  durum: string;
+  firmalar?: { unvan: string };
+}
+interface FirmaRecord {
+  id: number;
+  sahip_sirket_id: number;
+  unvan: string;
+  bakiye?: number;
+}
 
 export default function FaturaMerkezi() {
-  const pathname = usePathname();
-  const [aktifSirket, setAktifSirket] = useState<Sirket | null>(null);
-
-  // YETKİ KONTROL STATELERİ
-  const [kullaniciRol, setKullaniciRol] = useState<string>("");
-  const isYonetici = kullaniciRol.includes("YONETICI");
-  const isPlasiyer = kullaniciRol.includes("PLASIYER") || isYonetici;
-  const isDepocu = kullaniciRol.includes("DEPOCU") || isYonetici;
-  const isMuhasebe = kullaniciRol.includes("MUHASEBE") || isYonetici;
+  const { aktifSirket, kullaniciRol, isYonetici, isMuhasebe } = useAuth();
+  const toast = useToast();
   const hasAccess = isYonetici || isMuhasebe; // Sadece Yönetici ve Muhasebe fatura kesebilir
 
-  const [faturalar, setFaturalar] = useState<any[]>([]);
-  const [firmalar, setFirmalar] = useState<any[]>([]);
+  const [faturalar, setFaturalar] = useState<FaturaRecord[]>([]);
+  const [firmalar, setFirmalar] = useState<FirmaRecord[]>([]);
   const [aramaTerimi, setAramaTerimi] = useState("");
   const [yukleniyor, setYukleniyor] = useState(true);
-  const [mobilMenuAcik, setMobilMenuAcik] = useState(false);
   const [seciliFaturaId, setSeciliFaturaId] = useState<number | null>(null);
 
   // MODAL STATELERİ
@@ -39,28 +41,6 @@ export default function FaturaMerkezi() {
   const [faturaTipi, setFaturaTipi] = useState<"GELEN" | "GIDEN">("GIDEN");
   const [faturaForm, setFaturaForm] = useState<FaturaFormState>({ fatura_no: "", tarih: new Date().toISOString().split('T')[0], cari_id: "" });
   const [faturaKalemleri, setFaturaKalemleri] = useState<FaturaKalemi[]>([]);
-
-  useEffect(() => {
-    const sirketStr = localStorage.getItem("aktifSirket");
-    const kullaniciStr = localStorage.getItem("aktifKullanici");
-    if (!sirketStr || !kullaniciStr) { window.location.href = "/login"; return; }
-    
-    try {
-        const sirket: Sirket = JSON.parse(sirketStr);
-        const kullanici: Kullanici = JSON.parse(kullaniciStr);
-        if (sirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
-        
-        const rolStr = kullanici.rol || "";
-        setKullaniciRol(rolStr);
-        setAktifSirket(sirket);
-
-        if (rolStr.includes("YONETICI") || rolStr.includes("MUHASEBE")) {
-            verileriGetir(sirket.id);
-        } else {
-            setYukleniyor(false);
-        }
-    } catch(err) { window.location.href = "/login"; }
-  }, []);
 
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
@@ -72,6 +52,17 @@ export default function FaturaMerkezi() {
       setYukleniyor(false);
   }
 
+  useEffect(() => {
+    if (!aktifSirket) return;
+    if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
+
+    if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("MUHASEBE")) {
+        verileriGetir(aktifSirket.id);
+    } else {
+        setYukleniyor(false);
+    }
+  }, [aktifSirket, kullaniciRol]);
+
   // YENİ FATURA OLUŞTURMA BAŞLATICI
   const yeniFaturaBaslat = (tip: "GELEN" | "GIDEN") => {
       setFaturaTipi(tip);
@@ -82,33 +73,40 @@ export default function FaturaMerkezi() {
   };
 
   const incele = async () => {
-      if (!seciliFaturaId) return alert("Lütfen listeden bir fatura seçin!");
+      if (!seciliFaturaId) { toast.error("Lütfen listeden bir fatura seçin!"); return; }
       const fatura = faturalar.find(f => f.id === seciliFaturaId);
       if (!fatura) return;
-      
+
       setFaturaTipi(fatura.tip);
       setFaturaForm({ fatura_no: fatura.fatura_no, tarih: fatura.tarih, cari_id: fatura.cari_id?.toString() || "" });
-      
+
       const { data } = await supabase.from("fatura_kalemleri").select("*").eq("fatura_id", fatura.id);
       setFaturaKalemleri(data || []);
       setModalAcik(true);
   };
 
   const sil = async () => {
-      if (!seciliFaturaId) return alert("Lütfen listeden bir fatura seçin!");
+      if (!seciliFaturaId) { toast.error("Lütfen listeden bir fatura seçin!"); return; }
       if(window.confirm("Bu faturayı tamamen iptal edip silmek istediğinize emin misiniz? (Cari bakiye işlemi manuel düzeltilmelidir)")) {
-          await supabase.from("fatura_kalemleri").delete().eq("fatura_id", seciliFaturaId);
-          await supabase.from("faturalar").delete().eq("id", seciliFaturaId);
-          setSeciliFaturaId(null); 
-          if (aktifSirket) verileriGetir(aktifSirket.id);
+          try {
+              await supabase.from("fatura_kalemleri").delete().eq("fatura_id", seciliFaturaId);
+              const { error } = await supabase.from("faturalar").delete().eq("id", seciliFaturaId);
+              if (error) throw error;
+              toast.success("Fatura başarıyla silindi.");
+              setSeciliFaturaId(null);
+              if (aktifSirket) verileriGetir(aktifSirket.id);
+          } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : String(error);
+              toast.error("Silme hatası: " + message);
+          }
       }
   };
 
   const satirEkle = () => setFaturaKalemleri([...faturaKalemleri, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
-  const satirGuncelle = (index: number, alan: keyof FaturaKalemi, deger: any) => { 
-      const yeni = [...faturaKalemleri]; 
+  const satirGuncelle = (index: number, alan: keyof FaturaKalemi, deger: string | number) => {
+      const yeni = [...faturaKalemleri];
       yeni[index] = { ...yeni[index], [alan]: deger };
-      setFaturaKalemleri(yeni); 
+      setFaturaKalemleri(yeni);
   };
   const satirSil = (index: number) => setFaturaKalemleri(faturaKalemleri.filter((_, i) => i !== index));
 
@@ -118,8 +116,8 @@ export default function FaturaMerkezi() {
   const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
   const kaydet = async () => {
-      if (!faturaForm.cari_id) return alert("Lütfen Cari (Müşteri/Tedarikçi) seçin!");
-      if (faturaKalemleri.length === 0 || !faturaKalemleri[0].urun_adi) return alert("Faturaya en az bir kalem eklemelisiniz!");
+      if (!faturaForm.cari_id) { toast.error("Lütfen Cari (Müşteri/Tedarikçi) seçin!"); return; }
+      if (faturaKalemleri.length === 0 || !faturaKalemleri[0].urun_adi) { toast.error("Faturaya en az bir kalem eklemelisiniz!"); return; }
 
       const gToplam = genelToplamHesapla();
       let islemYapilacakId = seciliFaturaId;
@@ -137,14 +135,14 @@ export default function FaturaMerkezi() {
               genel_toplam: gToplam,
               durum: 'BEKLIYOR'
           }]).select().single();
-          if (error) return alert("Fatura kaydedilemedi!");
+          if (error) { toast.error("Fatura kaydedilemedi!"); return; }
           islemYapilacakId = data.id;
 
           // CARİ BAKİYEYE OTOMATİK İŞLEME
           const islemAciklama = faturaTipi === "GIDEN" ? `Satış Faturası (${faturaForm.fatura_no})` : `Alış Faturası (${faturaForm.fatura_no})`;
           const borc = faturaTipi === "GIDEN" ? gToplam : 0;
-          const alacak = faturaTipi === "GELEN" ? gToplam : 0; 
-          
+          const alacak = faturaTipi === "GELEN" ? gToplam : 0;
+
           await supabase.from("cari_hareketler").insert([{
               firma_id: Number(faturaForm.cari_id),
               tarih: faturaForm.tarih,
@@ -171,130 +169,82 @@ export default function FaturaMerkezi() {
           await supabase.from("fatura_kalemleri").delete().eq("fatura_id", islemYapilacakId);
           const eklenecekler = faturaKalemleri.filter(k => k.urun_adi).map(k => ({
               fatura_id: islemYapilacakId,
-              urun_adi: k.urun_adi, miktar: k.miktar, birim: k.birim, birim_fiyat: k.birim_fiyat, 
+              urun_adi: k.urun_adi, miktar: k.miktar, birim: k.birim, birim_fiyat: k.birim_fiyat,
               kdv_orani: k.kdv_orani, toplam_tutar: (k.miktar * k.birim_fiyat) * (1 + (k.kdv_orani / 100))
           }));
           if (eklenecekler.length > 0) await supabase.from("fatura_kalemleri").insert(eklenecekler);
       }
 
-      setModalAcik(false); 
+      toast.success("Fatura başarıyla kaydedildi!");
+      setModalAcik(false);
       if (aktifSirket) verileriGetir(aktifSirket.id);
   };
 
-  const cikisYap = () => { localStorage.removeItem("aktifSirket"); localStorage.removeItem("aktifKullanici"); window.location.href = "/login"; };
-
   const filtrelenmisFaturalar = faturalar.filter(f => f.fatura_no.toLowerCase().includes(aramaTerimi.toLowerCase()) || (f.firmalar?.unvan || "").toLowerCase().includes(aramaTerimi.toLowerCase()));
 
-  if (!aktifSirket) return <div className="h-screen flex items-center justify-center bg-slate-100 font-bold text-slate-500">Sistem Doğrulanıyor...</div>;
+  if (!aktifSirket) return <div className="h-full flex items-center justify-center font-bold text-slate-500" style={{ background: "#f8fafc" }}>Sistem Doğrulanıyor...</div>;
 
   return (
-    <div className="bg-slate-100 font-sans h-screen flex overflow-hidden text-slate-800 w-full relative">
-      {mobilMenuAcik && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setMobilMenuAcik(false)}></div>}
-      
-      {/* --- GÜNCELLENMİŞ EKSİKSİZ SOL MENÜ --- */}
-      <aside className={`w-56 bg-slate-900 text-slate-300 flex flex-col shrink-0 text-sm border-r border-slate-800 print:hidden fixed md:static inset-y-0 left-0 z-50 transition-transform duration-300 ease-out ${mobilMenuAcik ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}`}>
-          <div className="h-16 flex flex-col items-center justify-center border-b border-slate-700 bg-slate-950 font-black text-white tracking-widest px-2 text-center relative">
-              <span className="text-orange-500 text-[10px] uppercase mb-0.5">{isYonetici ? 'Sistem Yöneticisi' : 'Personel Hesabı'}</span>
-              <span className="text-xs truncate w-full">{aktifSirket?.isletme_adi}</span>
-              <button onClick={() => setMobilMenuAcik(false)} className="md:hidden absolute right-4 text-slate-400 hover:text-white"><i className="fas fa-times text-lg"></i></button>
-          </div>
-          
-          <nav className="flex-1 py-4 space-y-1 overflow-y-auto custom-scrollbar">
-              {aktifSirket?.rol === "TOPTANCI" ? (
-                  <>
-                      {isYonetici ? <Link href="/dashboard" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/dashboard" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-chart-pie w-6"></i> Ana Sayfa</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500" title="Yetkiniz yok"><i className="fas fa-chart-pie w-6"></i> Ana Sayfa <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      {isYonetici || isPlasiyer || isDepocu ? <Link href="/pos" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/pos" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      {isYonetici || isPlasiyer || isDepocu ? <Link href="/" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-th-large w-6"></i> Siparişler (Fiş)</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-th-large w-6"></i> Siparişler (Fiş) <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      
-                      {isYonetici || isMuhasebe ? <Link href="/tahsilat" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/tahsilat" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-money-bill-wave w-6"></i> Tahsilat / Ödeme</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-money-bill-wave w-6"></i> Tahsilat / Ödeme <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      
-                      {/* AKTİF SAYFA BURASI (Faturalar) */}
-                      {isYonetici || isMuhasebe ? <Link href="/faturalar" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/faturalar" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-file-invoice w-6 text-blue-400"></i> Faturalar</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-file-invoice w-6"></i> Faturalar <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      
-                      {isYonetici || isDepocu ? <Link href="/stok" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-box w-6"></i> Stok Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-box w-6"></i> Stok Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      {isYonetici || isDepocu ? <Link href="/stok-hareketleri" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok-hareketleri" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-dolly-flatbed w-6"></i> Stok Hareketleri <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      {isYonetici || isPlasiyer || isMuhasebe ? <Link href="/cari" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/cari" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-users w-6"></i> Cari Kartları</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-users w-6"></i> Cari Kartları <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                      {isYonetici || isMuhasebe ? <Link href="/ekstre" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/ekstre" ? "bg-slate-800 text-white border-l-4 border-blue-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler</Link> : <div className="flex items-center px-6 py-3 opacity-40 cursor-not-allowed text-slate-500"><i className="fas fa-clipboard-list w-6"></i> Cari Hareketler <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-                  </>
-              ) : (
-                  <>
-                    <Link href="/portal/pos" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/pos" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-desktop w-6"></i> Hızlı Satış (POS)</Link>
-                    <Link href="/stok" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/stok" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-box w-6"></i> Market Stokları</Link>
-                    <Link href="/portal" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-store w-6"></i> Toptan Sipariş</Link>
-                    <Link href="/portal/siparisler" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/siparisler" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-list-alt w-6"></i> Siparişlerim</Link>
-                    <Link href="/portal/kasa" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/kasa" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-cash-register w-6"></i> Kasa & Nakit Akışı</Link>
-                    <Link href="/portal/veresiye" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-6 py-3 transition-all ${pathname === "/portal/veresiye" ? "bg-slate-800 text-white border-l-4 border-cyan-500 font-bold" : "text-slate-300 hover:bg-slate-800 hover:text-white border-l-4 border-transparent"}`}><i className="fas fa-book w-6"></i> Veresiye Defteri</Link>
-                  </>
-              )}
-          </nav>
-          <div className="p-4 border-t border-slate-800 space-y-2 shrink-0">
-              {isYonetici ? <Link href="/ayarlar" onClick={() => setMobilMenuAcik(false)} className={`flex items-center px-2 py-2 transition w-full text-xs uppercase tracking-widest rounded ${pathname === "/ayarlar" ? "bg-slate-800 text-white" : "text-slate-300 hover:text-white"}`}><i className="fas fa-cog w-6"></i> Ayarlar</Link> : <div className="flex items-center px-2 py-2 opacity-40 cursor-not-allowed text-slate-500" title="Yetkiniz yok"><i className="fas fa-cog w-6"></i> Ayarlar <i className="fas fa-lock ml-auto text-[10px]"></i></div>}
-              <button onClick={cikisYap} className="flex items-center px-2 py-2 hover:text-red-400 text-slate-500 transition w-full text-xs uppercase tracking-widest text-left"><i className="fas fa-sign-out-alt w-6"></i> Çıkış Yap</button>
-          </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-white relative w-full">
-        {/* MOBİL MENÜ BUTONU */}
-        <div className="md:hidden bg-white border-b border-slate-200 p-3 flex justify-between items-center shrink-0">
-             <h1 className="font-bold text-slate-800 text-sm"><i className="fas fa-file-invoice text-blue-600 mr-2"></i>Faturalar</h1>
-             <button onClick={() => setMobilMenuAcik(true)} className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-600 rounded border border-slate-300"><i className="fas fa-bars"></i></button>
-        </div>
-
+    <>
+      <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
         {!hasAccess ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50 animate-in zoom-in-95 duration-500">
-                <div className="w-32 h-32 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-5xl mb-6 shadow-inner border-4 border-white"><i className="fas fa-lock"></i></div>
-                <h1 className="text-3xl font-black text-slate-800 mb-2">Erişim Engellendi</h1>
-                <p className="text-slate-500 font-bold max-w-md mx-auto">Resmi Fatura ekranına sadece "YÖNETİCİ" veya "MUHASEBE" yetkisine sahip kullanıcılar erişebilir.</p>
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in zoom-in-95 duration-500" style={{ background: "#f8fafc" }}>
+                <div className="w-32 h-32 bg-red-50 text-red-500 flex items-center justify-center text-5xl mb-6 border-4 border-white"><i className="fas fa-lock"></i></div>
+                <h1 className="text-3xl font-semibold text-slate-800 mb-2">Erişim Engellendi</h1>
+                <p className="text-slate-500 font-bold max-w-md mx-auto">Resmi Fatura ekranına sadece &quot;YÖNETİCİ&quot; veya &quot;MUHASEBE&quot; yetkisine sahip kullanıcılar erişebilir.</p>
             </div>
         ) : (
             <>
-                <div className="h-14 bg-slate-100 border-b border-slate-300 flex items-center px-2 space-x-1 shrink-0 print:hidden overflow-x-auto custom-scrollbar">
-                    <button onClick={() => yeniFaturaBaslat('GIDEN')} className="flex items-center px-4 py-1.5 bg-blue-600 border border-blue-700 text-white rounded hover:bg-blue-700 text-xs font-bold shadow-sm whitespace-nowrap"><i className="fas fa-file-export mr-2"></i> Yeni Satış Faturası (Giden)</button>
-                    <button onClick={() => yeniFaturaBaslat('GELEN')} className="flex items-center px-4 py-1.5 bg-orange-500 border border-orange-600 text-white rounded hover:bg-orange-600 text-xs font-bold shadow-sm whitespace-nowrap"><i className="fas fa-file-import mr-2"></i> Yeni Alış Faturası (Gelen)</button>
-                    <div className="w-px h-6 bg-slate-300 mx-2 shrink-0"></div>
-                    <button onClick={incele} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm shrink-0"><i className="fas fa-search text-slate-600 mr-2"></i> İncele</button>
-                    <button onClick={sil} className="flex items-center px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm shrink-0"><i className="fas fa-trash-alt text-red-600 mr-2"></i> Sil</button>
-                </div>
-
-                <div className="h-10 bg-slate-200 border-b border-slate-300 flex items-center px-4 shrink-0 space-x-4 print:hidden">
-                    <span className="text-xs font-bold text-slate-600 uppercase hidden sm:block">Resmi Faturalar</span>
-                    <div className="flex-1 max-w-md relative">
-                        <input type="text" placeholder="Fatura No veya Cari Unvanı..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="w-full text-xs px-3 py-1 border border-slate-300 rounded shadow-inner outline-none focus:border-blue-500" />
-                        <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <div className="flex items-center justify-between px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => yeniFaturaBaslat('GIDEN')} className="btn-primary flex items-center gap-2"><i className="fas fa-file-export text-[10px]" /> SATIŞ FATURASI</button>
+                        <button onClick={() => yeniFaturaBaslat('GELEN')} className="btn-primary flex items-center gap-2" style={{ background: "#ea580c" }}><i className="fas fa-file-import text-[10px]" /> ALIŞ FATURASI</button>
+                        <button onClick={incele} className="btn-secondary flex items-center gap-2"><i className="fas fa-search text-[10px]" /> İNCELE</button>
+                        <button onClick={sil} className="btn-secondary flex items-center gap-2"><i className="fas fa-trash-alt text-[#dc2626] text-[10px]" /> SİL</button>
+                    </div>
+                    <div className="relative">
+                        <input type="text" placeholder="Fatura No veya Cari..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-64" />
+                        <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] text-[10px]" />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-auto bg-white relative print:hidden">
-                    <table className="w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
-                        <thead className="bg-slate-100 border-b-2 border-slate-300 sticky top-0 z-10 shadow-sm">
-                            <tr className="text-[11px] font-bold text-slate-700">
-                                <th className="p-2 border-r border-slate-300 w-8 text-center"><i className="fas fa-caret-down"></i></th>
-                                <th className="p-2 border-r border-slate-300 w-32 text-center">Tarih</th>
-                                <th className="p-2 border-r border-slate-300 w-32">Fatura No</th>
-                                <th className="p-2 border-r border-slate-300 w-24 text-center">Yön</th>
-                                <th className="p-2 border-r border-slate-300">Cari Ünvanı (Alıcı/Satıcı)</th>
-                                <th className="p-2 border-r border-slate-300 w-32 text-right">Ara Toplam</th>
-                                <th className="p-2 border-r border-slate-300 w-32 text-right">KDV Toplam</th>
-                                <th className="p-2 border-r border-slate-300 w-32 text-right">Genel Toplam (TL)</th>
+                <div className="flex-1 overflow-auto relative print:hidden" style={{ background: "var(--c-bg)" }}>
+                    <table className="tbl-kurumsal">
+                        <thead>
+                            <tr>
+                                <th className="w-8 text-center"><i className="fas fa-caret-down"></i></th>
+                                <th className="w-32 text-center">Tarih</th>
+                                <th className="w-32">Fatura No</th>
+                                <th className="w-24 text-center">Yön</th>
+                                <th>Cari Ünvanı (Alıcı/Satıcı)</th>
+                                <th className="w-32 text-right">Ara Toplam</th>
+                                <th className="w-32 text-right">KDV Toplam</th>
+                                <th className="w-32 text-right">Genel Toplam (TL)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filtrelenmisFaturalar.map((f) => {
+                            {yukleniyor ? (
+                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                            ) : filtrelenmisFaturalar.length === 0 ? (
+                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
+                            ) : (
+                            filtrelenmisFaturalar.map((f) => {
                                 const isSelected = seciliFaturaId === f.id;
                                 const isGiden = f.tip === "GIDEN";
                                 return (
-                                    <tr key={f.id} onClick={() => setSeciliFaturaId(f.id)} onDoubleClick={incele} className={`text-[11px] font-medium border-b border-slate-200 cursor-pointer select-none ${isSelected ? 'bg-[#000080] text-white' : 'hover:bg-slate-100 bg-white text-slate-800'}`}>
-                                        <td className="p-1.5 border-r border-slate-200 text-center">{isSelected && <i className="fas fa-caret-right text-white"></i>}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-center">{new Date(f.tarih).toLocaleDateString('tr-TR')}</td>
-                                        <td className="p-1.5 border-r border-slate-200 font-bold">{f.fatura_no}</td>
-                                        <td className={`p-1.5 border-r border-slate-200 text-center font-black ${isSelected ? 'text-white' : (isGiden ? 'text-blue-600' : 'text-orange-500')}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
-                                        <td className="p-1.5 border-r border-slate-200">{f.firmalar?.unvan || '-'}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-right">{Number(f.ara_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-right">{Number(f.kdv_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-right font-black">{Number(f.genel_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                    <tr key={f.id} onClick={() => setSeciliFaturaId(f.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-[#0f172a] text-white' : 'hover:bg-[#f8fafc]'}`}>
+                                        <td className="text-center">{isSelected && <i className="fas fa-caret-right text-white"></i>}</td>
+                                        <td className="text-center">{new Date(f.tarih).toLocaleDateString('tr-TR')}</td>
+                                        <td className="font-bold">{f.fatura_no}</td>
+                                        <td className={`text-center font-semibold ${isSelected ? 'text-white' : (isGiden ? 'text-[#1d4ed8]' : 'text-orange-500')}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
+                                        <td>{f.firmalar?.unvan || '-'}</td>
+                                        <td className="text-right">{Number(f.ara_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                        <td className="text-right">{Number(f.kdv_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                        <td className="text-right font-semibold">{Number(f.genel_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
                                     </tr>
                                 );
-                            })}
+                            })
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -304,27 +254,27 @@ export default function FaturaMerkezi() {
 
       {/* --- FATURA GİRİŞ MODALI --- */}
       {modalAcik && hasAccess && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 print:static print:bg-white p-2">
-          <div className="bg-slate-100 rounded shadow-2xl w-full max-w-5xl max-h-full flex flex-col overflow-hidden border border-slate-400 print:border-none print:shadow-none print:w-full">
-            <div className={`border-b border-slate-300 p-3 flex justify-between items-center print:hidden shrink-0 ${faturaTipi === 'GIDEN' ? 'bg-blue-100' : 'bg-orange-100'}`}>
-              <h3 className={`text-sm font-black flex items-center ${faturaTipi === 'GIDEN' ? 'text-blue-800' : 'text-orange-800'}`}>
-                  <i className={`fas ${faturaTipi === 'GIDEN' ? 'fa-file-export' : 'fa-file-import'} mr-2`}></i> 
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 print:static print:bg-white p-0 md:p-4">
+          <div className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:max-w-5xl flex flex-col overflow-hidden print:border-none print:w-full" style={{ border: "1px solid var(--c-border)" }}>
+            <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+              <h3 className={`text-sm font-semibold flex items-center ${faturaTipi === 'GIDEN' ? 'text-[#1d4ed8]' : 'text-orange-800'}`}>
+                  <i className={`fas ${faturaTipi === 'GIDEN' ? 'fa-file-export' : 'fa-file-import'} mr-2`}></i>
                   {faturaTipi === 'GIDEN' ? 'Satış Faturası (Giden)' : 'Alış Faturası (Gelen)'}
               </h3>
               <div className="flex space-x-2">
-                 <button onClick={() => window.print()} className="text-slate-600 hover:text-blue-600 px-3 py-1 border border-slate-300 bg-white rounded shadow-sm text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
+                 <button onClick={() => window.print()} className="btn-secondary text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
                  <button onClick={() => setModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
               </div>
             </div>
-            
-            <div className="p-4 bg-white border-b border-slate-300 shrink-0 overflow-x-auto">
+
+            <div className="p-4 bg-white shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--c-border)" }}>
                 <div className="flex flex-col sm:flex-row gap-4 min-w-[500px]">
                     <div className="flex-1 space-y-2">
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} className="flex-1 border border-slate-300 px-2 py-1.5 text-xs bg-slate-50 font-bold outline-none focus:border-blue-500" /></div>
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} className="flex-1 border border-slate-300 px-2 py-1.5 text-xs bg-slate-50 font-bold outline-none focus:border-blue-500" /></div>
+                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} className="input-kurumsal flex-1" /></div>
+                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} className="input-kurumsal flex-1" /></div>
                         <div className="flex items-center">
                             <label className="w-24 text-xs font-bold text-slate-700">Cari Hesap</label>
-                            <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="flex-1 border border-slate-300 px-2 py-1.5 text-xs focus:border-blue-500 outline-none font-bold text-slate-800">
+                            <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="input-kurumsal flex-1">
                                 <option value="">--- Fatura Kesilecek Cariyi Seçiniz ---</option>
                                 {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
                             </select>
@@ -333,18 +283,18 @@ export default function FaturaMerkezi() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto bg-slate-50 p-2 print:p-0 print:bg-white custom-scrollbar">
-                <table className="w-full text-left border-collapse bg-white border border-slate-300 min-w-[600px]">
-                    <thead className="bg-slate-200 border-b border-slate-300">
-                        <tr className="text-[11px] font-bold text-slate-700">
-                            <th className="p-1.5 border-r border-slate-300 w-8 text-center print:hidden">#</th>
-                            <th className="p-1.5 border-r border-slate-300">Stok / Hizmet Adı</th>
-                            <th className="p-1.5 border-r border-slate-300 w-24 text-center">Miktar</th>
-                            <th className="p-1.5 border-r border-slate-300 w-20 text-center">Birim</th>
-                            <th className="p-1.5 border-r border-slate-300 w-32 text-right">Birim Fiyat</th>
-                            <th className="p-1.5 border-r border-slate-300 w-16 text-center">KDV %</th>
-                            <th className="p-1.5 border-r border-slate-300 w-32 text-right">KDV'li Tutar</th>
-                            <th className="p-1.5 w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>
+            <div className="flex-1 overflow-auto p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
+                <table className="tbl-kurumsal">
+                    <thead>
+                        <tr>
+                            <th className="w-8 text-center print:hidden">#</th>
+                            <th>Stok / Hizmet Adı</th>
+                            <th className="w-24 text-center">Miktar</th>
+                            <th className="w-20 text-center">Birim</th>
+                            <th className="w-32 text-right">Birim Fiyat</th>
+                            <th className="w-16 text-center">KDV %</th>
+                            <th className="w-32 text-right">KDV&apos;li Tutar</th>
+                            <th className="w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -352,48 +302,48 @@ export default function FaturaMerkezi() {
                             const tutarKDVsiz = item.miktar * item.birim_fiyat;
                             const tutarKDVli = tutarKDVsiz * (1 + (item.kdv_orani / 100));
                             return (
-                                <tr key={index} className="border-b border-slate-200 hover:bg-yellow-50 focus-within:bg-yellow-50 transition-colors">
-                                    <td className="p-1 border-r border-slate-300 text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
-                                    <td className="p-0 border-r border-slate-300"><input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok veya Hizmet yazın" className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0 border-r border-slate-300"><input type="number" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0 border-r border-slate-300"><input type="text" value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white uppercase" /></td>
-                                    <td className="p-0 border-r border-slate-300"><input type="number" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-blue-700 outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0 border-r border-slate-300"><input type="number" value={item.kdv_orani} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center text-orange-600 outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-1.5 border-r border-slate-300 text-right text-[11px] font-black text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                    <td className="p-1 text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>
+                                <tr key={index} className="hover:bg-[#f8fafc] focus-within:bg-[#f8fafc] transition-colors">
+                                    <td className="text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
+                                    <td className="p-0"><input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok veya Hizmet yazın" className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" /></td>
+                                    <td className="p-0"><input type="number" min="1" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" /></td>
+                                    <td className="p-0"><input type="text" value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white uppercase" /></td>
+                                    <td className="p-0"><input type="number" min="0" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" /></td>
+                                    <td className="p-0"><input type="number" min="0" value={item.kdv_orani} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center text-orange-600 outline-none bg-transparent focus:bg-white" /></td>
+                                    <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                    <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
-                <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-blue-600 hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>
+                <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-[#1d4ed8] hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>
             </div>
 
-            <div className="bg-slate-200 border-t border-slate-300 p-4 flex flex-col sm:flex-row justify-between sm:items-end gap-4 shrink-0 print:bg-white print:border-black print:border-t-2">
+            <div className="p-4 flex flex-col sm:flex-row justify-between sm:items-end gap-4 shrink-0 print:bg-white print:border-black print:border-t-2" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
                 <div className="print:hidden w-full sm:w-auto">
-                    <button onClick={kaydet} className={`w-full sm:w-auto px-6 py-3 sm:py-2 border text-white font-black text-xs uppercase tracking-widest rounded shadow-md transition-colors flex items-center justify-center ${faturaTipi === 'GIDEN' ? 'bg-blue-600 hover:bg-blue-700 border-blue-700' : 'bg-orange-500 hover:bg-orange-600 border-orange-600'}`}>
-                        <i className="fas fa-save mr-2"></i> Faturayı Kaydet 
+                    <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center ${faturaTipi === 'GELEN' ? '' : ''}`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
+                        <i className="fas fa-save mr-2"></i> Faturayı Kaydet
                     </button>
                 </div>
-                
-                <div className="bg-white border border-slate-400 p-3 rounded shadow-inner w-full sm:w-72 self-end">
-                    <div className="flex justify-between items-center border-b border-slate-100 pb-1 mb-1">
+
+                <div className="bg-white p-3 w-full sm:w-72 self-end" style={{ border: "1px solid var(--c-border)" }}>
+                    <div className="flex justify-between items-center pb-1 mb-1" style={{ borderBottom: "1px solid var(--c-border)" }}>
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Ara Toplam</span>
                         <span className="text-xs font-bold text-slate-700">{araToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
                     </div>
-                    <div className="flex justify-between items-center border-b border-slate-200 pb-2 mb-2">
+                    <div className="flex justify-between items-center pb-2 mb-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
                         <span className="text-[10px] font-bold text-slate-500 uppercase">KDV Toplam</span>
                         <span className="text-xs font-bold text-orange-600">{kdvToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-xs font-black text-slate-800 uppercase">Genel Toplam</span>
-                        <span className="text-xl font-black text-[#000080]">{genelToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
+                        <span className="text-xs font-semibold text-slate-800 uppercase">Genel Toplam</span>
+                        <span className="text-xl font-semibold text-[#1d4ed8]">{genelToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
                     </div>
                 </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
