@@ -23,6 +23,7 @@ const TOPTANCI_MENU: MenuItem[] = [
     { href: "/stok-hareketleri", label: "Stok Hareketleri", icon: "fa-dolly-flatbed", yetkiler: ["YONETICI", "DEPOCU"] },
     { href: "/cari", label: "Cari Kartları", icon: "fa-users", section: "MUHASEBE", yetkiler: ["YONETICI", "PLASIYER", "MUHASEBE"] },
     { href: "/ekstre", label: "Cari Hareketler", icon: "fa-clipboard-list", yetkiler: ["YONETICI", "MUHASEBE"] },
+    { href: "/raporlar", label: "Raporlar", icon: "fa-chart-bar", yetkiler: ["YONETICI", "MUHASEBE"] },
 ];
 
 const MUSTERI_MENU: MenuItem[] = [
@@ -30,9 +31,11 @@ const MUSTERI_MENU: MenuItem[] = [
     { href: "/stok", label: "Stok Yönetimi", icon: "fa-box" },
     { href: "/portal", label: "Toptan Sipariş", icon: "fa-store", section: "TEDARİK" },
     { href: "/portal/siparisler", label: "Siparişlerim", icon: "fa-list-alt" },
+    { href: "/portal/toptancilar", label: "Toptancılarım", icon: "fa-handshake" },
     { href: "/portal/kasa", label: "Kasa & Nakit Akışı", icon: "fa-cash-register", section: "FİNANS" },
     { href: "/portal/veresiye", label: "Veresiye Defteri", icon: "fa-book" },
     { href: "/portal/ekstre", label: "Hesap Ekstresi", icon: "fa-clipboard-list" },
+    { href: "/portal/raporlar", label: "Raporlarım", icon: "fa-chart-bar" },
 ];
 
 const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
@@ -45,6 +48,7 @@ const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
     "/stok-hareketleri": { baslik: "Stok Hareketleri", alt: "Giriş / çıkış kayıtları" },
     "/cari": { baslik: "Cari Kartları", alt: "Müşteri ve tedarikçi hesapları" },
     "/ekstre": { baslik: "Cari Hareketler", alt: "Hesap ekstresi ve yürüyen bakiye" },
+    "/raporlar": { baslik: "Raporlar", alt: "Satış, tahsilat ve performans analizleri" },
     "/ayarlar": { baslik: "Sistem Ayarları", alt: "Firma bilgileri ve personel yönetimi" },
     "/portal/pos": { baslik: "Hızlı Satış (POS)", alt: "Perakende satış terminali" },
     "/portal": { baslik: "Toptan Sipariş", alt: "Toptancıdan ürün sipariş edin" },
@@ -52,6 +56,8 @@ const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
     "/portal/kasa": { baslik: "Kasa & Nakit Akışı", alt: "Günlük kasa işlemleri" },
     "/portal/veresiye": { baslik: "Veresiye Defteri", alt: "Veresiye müşteri takibi" },
     "/portal/ekstre": { baslik: "Hesap Ekstresi", alt: "Toptancı nezdinde cari hesap" },
+    "/portal/toptancilar": { baslik: "Toptancılarım", alt: "Kayıtlı toptancı bağlantıları" },
+    "/portal/raporlar": { baslik: "Raporlarım", alt: "Satış, kasa ve veresiye analizleri" },
 };
 
 export default function AppWrapper({ children }: { children: React.ReactNode }) {

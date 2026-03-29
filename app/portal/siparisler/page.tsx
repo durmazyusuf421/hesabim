@@ -35,6 +35,7 @@ export default function MusteriSiparisleri() {
   const [siparisler, setSiparisler] = useState<Siparis[]>([]);
   const [toptancilar, setToptancilar] = useState<SiparisToptanci[]>([]);
   const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
+  const [aktifSekme, setAktifSekme] = useState<"YENI" | "GECMIS">("YENI");
 
   const [modalAcik, setModalAcik] = useState(false);
   const [seciliSiparis, setSeciliSiparis] = useState<Siparis | null>(null);
@@ -93,8 +94,15 @@ export default function MusteriSiparisleri() {
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
 
-          {/* TOOLBAR */}
+          {/* SEKMELER + TOOLBAR */}
           <div className="flex items-center gap-2 px-4 py-2 shrink-0 flex-wrap" style={{ borderBottom: "1px solid var(--c-border)" }}>
+              <button onClick={() => setAktifSekme("YENI")} className={aktifSekme === "YENI" ? "btn-primary whitespace-nowrap" : "btn-secondary whitespace-nowrap"}>
+                  Yeni Siparişler {siparisler.filter(s => ["Onay Bekliyor", "HAZIRLANIYOR", "YENI"].includes(s.durum)).length > 0 && <span className="ml-1.5 bg-[#dc2626] text-white text-[9px] font-semibold px-1.5 py-0.5 inline-block">{siparisler.filter(s => ["Onay Bekliyor", "HAZIRLANIYOR", "YENI"].includes(s.durum)).length}</span>}
+              </button>
+              <button onClick={() => setAktifSekme("GECMIS")} className={aktifSekme === "GECMIS" ? "btn-primary whitespace-nowrap" : "btn-secondary whitespace-nowrap"}>
+                  Geçmiş Siparişler
+              </button>
+              <div className="w-px h-6" style={{ background: "var(--c-border)" }}></div>
               <Link href="/portal" className="btn-primary flex items-center whitespace-nowrap">
                   <i className="fas fa-plus mr-2"></i> Yeni Siparis Olustur
               </Link>
@@ -125,7 +133,10 @@ export default function MusteriSiparisleri() {
                       </tr>
                   </thead>
                   <tbody>
-                      {siparisler.map((s) => {
+                      {(aktifSekme === "YENI"
+                          ? siparisler.filter(s => ["Onay Bekliyor", "HAZIRLANIYOR", "YENI"].includes(s.durum))
+                          : siparisler.filter(s => ["TAMAMLANDI", "BITTI", "IPTAL", "Onaylandı"].includes(s.durum))
+                      ).map((s) => {
                           const isSelected = seciliSiparisId === s.id;
 
                           return (

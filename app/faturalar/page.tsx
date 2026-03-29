@@ -204,8 +204,8 @@ export default function FaturaMerkezi() {
             </div>
         ) : (
             <>
-                <div className="flex items-center justify-between px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
-                    <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between px-4 py-2 shrink-0 flex-wrap gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                    <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => yeniFaturaBaslat('GIDEN')} className="btn-primary flex items-center gap-2"><i className="fas fa-file-export text-[10px]" /> SATIŞ FATURASI</button>
                         <button onClick={() => yeniFaturaBaslat('GELEN')} className="btn-primary flex items-center gap-2" style={{ background: "#ea580c" }}><i className="fas fa-file-import text-[10px]" /> ALIŞ FATURASI</button>
                         <button onClick={incele} className="btn-secondary flex items-center gap-2"><i className="fas fa-search text-[10px]" /> İNCELE</button>
@@ -241,11 +241,11 @@ export default function FaturaMerkezi() {
                                 const isSelected = seciliFaturaId === f.id;
                                 const isGiden = f.tip === "GIDEN";
                                 return (
-                                    <tr key={f.id} onClick={() => setSeciliFaturaId(f.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-[#0f172a] text-white' : 'hover:bg-[#f8fafc]'}`}>
-                                        <td className="text-center">{isSelected && <i className="fas fa-caret-right text-white"></i>}</td>
+                                    <tr key={f.id} onClick={() => setSeciliFaturaId(f.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 text-slate-800' : 'bg-white hover:bg-slate-50'}`}>
+                                        <td className="text-center">{isSelected && <i className="fas fa-caret-right text-blue-500"></i>}</td>
                                         <td className="text-center">{new Date(f.tarih).toLocaleDateString('tr-TR')}</td>
                                         <td className="font-bold">{f.fatura_no}</td>
-                                        <td className={`text-center font-semibold ${isSelected ? 'text-white' : (isGiden ? 'text-[#1d4ed8]' : 'text-orange-500')}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
+                                        <td className={`text-center font-semibold ${isGiden ? 'text-[#1d4ed8]' : 'text-orange-500'}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
                                         <td>{f.firmalar?.unvan || '-'}</td>
                                         <td className="text-right">{Number(f.ara_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
                                         <td className="text-right">{Number(f.kdv_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>

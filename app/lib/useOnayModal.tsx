@@ -25,7 +25,7 @@ export function useOnayModal() {
     const OnayModal = () => {
         if (!state.acik) return null;
         return (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
                 <div className="bg-white border border-[#e2e8f0] w-full max-w-md">
                     <div className="px-5 py-4" style={{ borderBottom: "1px solid var(--c-border)" }}>
                         <div className="text-[13px] font-semibold text-[#0f172a]">{state.baslik}</div>

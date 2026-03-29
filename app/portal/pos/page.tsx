@@ -20,11 +20,19 @@ export default function PosEkrani() {
   const [sepet, setSepet] = useState<any[]>([]);
   const [barkodGirdisi, setBarkodGirdisi] = useState("");
   const [seciliMusteriId, setSeciliMusteriId] = useState<string>("");
+  const [musteriArama, setMusteriArama] = useState("");
+  const [veresiyeOnayAcik, setVeresiyeOnayAcik] = useState(false);
   const [islemYapiliyor, setIslemYapiliyor] = useState(false);
   
   // MANUEL ÜRÜN ARAMA STATELERİ
   const [aramaModalAcik, setAramaModalAcik] = useState(false);
   const [urunAramaTerimi, setUrunAramaTerimi] = useState("");
+
+
+  // PARK STATELERİ
+  interface ParkItem { sepet: typeof sepet; toplam: number; saat: string; musteriAdi: string; }
+  const [parklar, setParklar] = useState<ParkItem[]>([]);
+  const [parkModalAcik, setParkModalAcik] = useState(false);
 
   const barkodInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,7 +42,38 @@ export default function PosEkrani() {
     setKullaniciAdi(kullanici?.ad_soyad || "Kasiyer");
     verileriGetir(aktifSirket.id);
     barkodInputRef.current?.focus();
+    // Parkları localStorage'dan yükle
+    try { const p = localStorage.getItem("pos_parklar"); if (p) setParklar(JSON.parse(p)); } catch { /* */ }
   }, [aktifSirket, kullanici]);
+
+  const parklariKaydet = (yeniParklar: ParkItem[]) => { setParklar(yeniParklar); localStorage.setItem("pos_parklar", JSON.stringify(yeniParklar)); };
+
+  const parkaAl = () => {
+      if (sepet.length === 0) { toast.error("Sepet boş, park edilecek ürün yok!"); return; }
+      const yeniPark: ParkItem = { sepet: [...sepet], toplam: genelToplam, saat: new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }), musteriAdi: "" };
+      parklariKaydet([...parklar, yeniPark]);
+      setSepet([]); setSeciliMusteriId("");
+      toast.success("Sepet park edildi!");
+      barkodInputRef.current?.focus();
+  };
+
+  const parktanYukle = (idx: number) => {
+      if (sepet.length > 0 && !window.confirm("Mevcut sepet temizlenecek. Devam etmek istiyor musunuz?")) return;
+      const park = parklar[idx];
+      setSepet(park.sepet);
+      const yeniParklar = parklar.filter((_, i) => i !== idx);
+      parklariKaydet(yeniParklar);
+      setParkModalAcik(false);
+      toast.success("Park edilmiş sepet yüklendi!");
+      barkodInputRef.current?.focus();
+  };
+
+  const parkSil = (idx: number) => {
+      const yeniParklar = parklar.filter((_, i) => i !== idx);
+      parklariKaydet(yeniParklar);
+      toast.success("Park silindi.");
+  };
+
 
   async function verileriGetir(sirketId: number) {
       const { data: uData } = await supabase.from("urunler").select("*").eq("sahip_sirket_id", sirketId).order('urun_adi');
@@ -172,7 +211,7 @@ export default function PosEkrani() {
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
         <div className="flex-1 flex flex-col lg:flex-row gap-4 p-2 lg:p-4 overflow-auto lg:overflow-hidden select-none">
-          
+
           {/* SÜTUN 1: SEPET (SATIŞ FİŞİ) - MODERN & OKUNAKLI */}
           <div className="w-full lg:w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
               <div className="bg-slate-50 border-b border-slate-200 p-3 lg:p-4 flex flex-wrap justify-between items-center gap-2 z-10 shrink-0">
@@ -283,7 +322,7 @@ export default function PosEkrani() {
                   <button onClick={() => odemeAl("KREDI_KARTI")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-credit-card text-2xl"></i> K. KARTI
                   </button>
-                  <button onClick={() => odemeAl("VERESIYE")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
+                  <button onClick={() => { setVeresiyeOnayAcik(true); setMusteriArama(""); setSeciliMusteriId(""); }} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-orange-500 hover:bg-orange-600 text-white font-black text-xl transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-book text-2xl"></i> VERESİYE
                   </button>
                   <button onClick={sepetiTemizle} disabled={sepet.length === 0} className="py-4 bg-slate-200 hover:bg-red-500 hover:text-white text-slate-600 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1 border border-slate-300 hover:border-red-600">
@@ -295,50 +334,28 @@ export default function PosEkrani() {
           {/* SÜTUN 3: MÜŞTERİ, YENİ ÖZELLİKLER & İŞLEMLER */}
           <div className="w-full lg:w-[25%] flex flex-col gap-4">
               
-              {/* Müşteri Seçimi */}
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 shrink-0">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center">
-                      <i className="fas fa-user-tag text-blue-500 mr-2 text-sm" /> Müşteri Seçimi (Veresiye)
-                  </label>
-                  <select 
-                      value={seciliMusteriId} 
-                      onChange={(e) => { setSeciliMusteriId(e.target.value); barkodInputRef.current?.focus(); }}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 font-bold text-sm rounded-xl p-3 outline-none focus:border-blue-500 focus:bg-white cursor-pointer transition-colors shadow-inner"
-                  >
-                      <option value="">-- NAKİT MÜŞTERİ --</option>
-                      {musteriler.map(m => (
-                          <option key={m.id} value={m.id}>{m.ad_soyad} (B: {m.bakiye})</option>
-                      ))}
-                  </select>
+              {/* Hızlı İşlemler */}
+              <div className="flex-1 bg-white border border-slate-200 p-3 grid grid-cols-2 gap-2 auto-rows-min">
+                  <button onClick={parkaAl} disabled={sepet.length === 0} className="bg-amber-50 hover:bg-amber-100 text-amber-600 flex flex-col items-center justify-center gap-1.5 py-4 transition-colors disabled:opacity-40">
+                      <i className="fas fa-pause-circle text-2xl" />
+                      <span className="text-[11px] font-semibold">Parka Al</span>
+                  </button>
+                  <button onClick={() => setParkModalAcik(true)} className="bg-cyan-50 hover:bg-cyan-100 text-cyan-600 flex flex-col items-center justify-center gap-1.5 py-4 transition-colors relative">
+                      <i className="fas fa-play-circle text-2xl" />
+                      <span className="text-[11px] font-semibold">Parktan Çıkart</span>
+                      {parklar.length > 0 && <span className="absolute top-1 right-1 bg-[#dc2626] text-white text-[9px] font-semibold w-5 h-5 flex items-center justify-center">{parklar.length}</span>}
+                  </button>
+                  <button onClick={() => setAramaModalAcik(true)} className="bg-blue-50 hover:bg-blue-100 text-[#1d4ed8] flex flex-col items-center justify-center gap-1.5 py-4 transition-colors col-span-2">
+                      <i className="fas fa-search text-xl" />
+                      <span className="text-[11px] font-semibold">Manuel Ürün Ara</span>
+                  </button>
               </div>
 
-              {/* YENİ EKLENEN: MANUEL ÜRÜN ARAMA BUTONU */}
-              <button onClick={() => setAramaModalAcik(true)} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl p-4 shadow-lg flex flex-col items-center justify-center transition-transform hover:-translate-y-1 active:translate-y-0 shrink-0">
-                  <i className="fas fa-search text-3xl mb-2 drop-shadow-sm"></i>
-                  <span className="font-black text-lg tracking-wide drop-shadow-sm">MANUEL ÜRÜN ARA</span>
-                  <span className="text-[10px] font-medium opacity-80 uppercase tracking-widest mt-1">Barkodsuz Ekle</span>
-              </button>
-
-              {/* Diğer Hızlı İşlemler */}
-              <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 p-3 grid grid-cols-2 grid-rows-3 gap-2">
-                  {[
-                      { text: 'Müşteri Ekle', icon: 'fa-user-plus', color: 'text-emerald-500', bg: 'bg-emerald-50 hover:bg-emerald-100' },
-                      { text: 'Fiyat Gör', icon: 'fa-tags', color: 'text-purple-500', bg: 'bg-purple-50 hover:bg-purple-100' },
-                      { text: 'Parka Al', icon: 'fa-pause-circle', color: 'text-amber-500', bg: 'bg-amber-50 hover:bg-amber-100' },
-                      { text: 'Satışları Gör', icon: 'fa-receipt', color: 'text-cyan-500', bg: 'bg-cyan-50 hover:bg-cyan-100' },
-                      { text: 'Dara Al (Terazi)', icon: 'fa-balance-scale', color: 'text-slate-500', bg: 'bg-slate-100 hover:bg-slate-200', colSpan: true },
-                  ].map((btn, i) => (
-                      <button key={i} className={`rounded-xl border border-transparent flex flex-col items-center justify-center gap-2 transition-all group ${btn.bg} ${btn.colSpan ? 'col-span-2' : ''}`}>
-                          <i className={`fas ${btn.icon} text-2xl ${btn.color} group-hover:scale-110 transition-transform`}></i>
-                          <span className="text-xs font-bold text-slate-700">{btn.text}</span>
-                      </button>
-                  ))}
-              </div>
 
               {/* Kasayı Kapat */}
-              <Link href="/portal" className="h-16 bg-red-50 border border-red-200 hover:bg-red-600 hover:text-white text-red-600 rounded-2xl flex items-center justify-center shadow-sm transition-all group shrink-0">
-                  <i className="fas fa-sign-out-alt text-xl mr-3 group-hover:-translate-x-1 transition-transform"></i>
-                  <span className="font-black text-sm uppercase tracking-widest">KASAYI KAPAT</span>
+              <Link href="/portal" className="h-14 bg-red-50 border border-red-200 hover:bg-red-600 hover:text-white text-red-600 flex items-center justify-center transition-all group shrink-0">
+                  <i className="fas fa-sign-out-alt text-lg mr-2 group-hover:-translate-x-1 transition-transform"></i>
+                  <span className="font-semibold text-[11px] uppercase tracking-widest">KASAYI KAPAT</span>
               </Link>
           </div>
 
@@ -402,6 +419,116 @@ export default function PosEkrani() {
       )}
       </main>
       <OnayModal />
+
+      {/* VERESİYE 2 ADIMLI MODAL */}
+      {veresiyeOnayAcik && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white border border-[#e2e8f0] w-full max-w-md flex flex-col max-h-[80vh]">
+                  <div className="px-5 py-4 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                      <div className="text-[13px] font-semibold text-[#0f172a]">{seciliMusteriId ? "Veresiye Onayı" : "Müşteri Seçimi"}</div>
+                      <div className="text-[10px] text-[#64748b] mt-0.5">{seciliMusteriId ? "Adım 2/2 — Tutarı onaylayın" : "Adım 1/2 — Veresiye yapılacak müşteriyi seçin"}</div>
+                  </div>
+
+                  {!seciliMusteriId ? (
+                      <>
+                          <div className="px-4 pt-3 shrink-0">
+                              <div className="relative">
+                                  <i className="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8] text-[10px]" />
+                                  <input autoFocus type="text" value={musteriArama} onChange={e => setMusteriArama(e.target.value)} placeholder="Müşteri adı ara..." className="input-kurumsal w-full pl-8 text-[12px]" />
+                              </div>
+                          </div>
+                          <div className="flex-1 overflow-y-auto px-2 py-2">
+                              {musteriler.filter(m => musteriArama.length < 2 || m.ad_soyad.toLocaleLowerCase("tr-TR").includes(musteriArama.toLocaleLowerCase("tr-TR"))).length === 0 ? (
+                                  <div className="p-6 text-center text-[11px] text-[#94a3b8] font-semibold">Müşteri bulunamadı</div>
+                              ) : (
+                                  musteriler.filter(m => musteriArama.length < 2 || m.ad_soyad.toLocaleLowerCase("tr-TR").includes(musteriArama.toLocaleLowerCase("tr-TR"))).map(m => (
+                                      <button key={m.id} onClick={() => setSeciliMusteriId(m.id.toString())} className="w-full text-left px-3 py-3 hover:bg-[#f8fafc] flex items-center justify-between transition-colors" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                          <div className="flex items-center gap-2.5">
+                                              <div className="w-8 h-8 bg-[#f1f5f9] text-[#64748b] flex items-center justify-center shrink-0"><i className="fas fa-user text-[11px]" /></div>
+                                              <span className="text-[12px] font-semibold text-[#0f172a]">{m.ad_soyad}</span>
+                                          </div>
+                                          <span className={`text-[11px] font-semibold tabular-nums shrink-0 ${Number(m.bakiye) > 0 ? "text-[#dc2626]" : "text-[#059669]"}`}>{Number(m.bakiye).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                                      </button>
+                                  ))
+                              )}
+                          </div>
+                          <div className="px-5 py-3 shrink-0 flex justify-end" style={{ borderTop: "1px solid var(--c-border)" }}>
+                              <button onClick={() => setVeresiyeOnayAcik(false)} className="btn-secondary">İptal</button>
+                          </div>
+                      </>
+                  ) : (() => {
+                      const musteri = musteriler.find(m => m.id.toString() === seciliMusteriId);
+                      const mevcutBakiye = Number(musteri?.bakiye) || 0;
+                      const eklenecek = genelToplam;
+                      const yeniBakiye = mevcutBakiye + eklenecek;
+                      return (
+                          <>
+                              <div className="px-5 py-6">
+                                  <div className="w-12 h-12 bg-[#fff7ed] text-[#f59e0b] flex items-center justify-center mx-auto mb-4"><i className="fas fa-book text-xl" /></div>
+                                  <p className="text-[16px] text-[#0f172a] text-center font-semibold mb-5">{musteri?.ad_soyad}</p>
+                                  <div className="space-y-2">
+                                      <div className="flex justify-between items-center py-2" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                          <span className="text-[12px] text-[#64748b]">Mevcut Bakiye</span>
+                                          <span className="text-[13px] font-semibold text-[#dc2626] tabular-nums">{mevcutBakiye.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                                      </div>
+                                      <div className="flex justify-between items-center py-2" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                          <span className="text-[12px] text-[#64748b]">Eklenecek Tutar</span>
+                                          <span className="text-[13px] font-semibold text-[#f59e0b] tabular-nums">+ {eklenecek.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                                      </div>
+                                      <div className="flex justify-between items-center py-2 bg-[#fef2f2] px-3 -mx-3">
+                                          <span className="text-[12px] font-semibold text-[#0f172a]">Yeni Bakiye</span>
+                                          <span className="text-[15px] font-semibold text-[#dc2626] tabular-nums">{yeniBakiye.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                                      </div>
+                                  </div>
+                              </div>
+                              <div className="px-5 py-3 shrink-0 flex justify-between" style={{ borderTop: "1px solid var(--c-border)" }}>
+                                  <button onClick={() => setSeciliMusteriId("")} className="btn-secondary flex items-center gap-2"><i className="fas fa-arrow-left text-[10px]" /> Geri</button>
+                                  <button onClick={() => { setVeresiyeOnayAcik(false); odemeAl("VERESIYE"); }} className="btn-primary" style={{ background: "#dc2626" }}>Onayla</button>
+                              </div>
+                          </>
+                      );
+                  })()}
+              </div>
+          </div>
+      )}
+
+      {/* PARK LİSTESİ MODALI */}
+      {parkModalAcik && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white border border-[#e2e8f0] w-full max-w-md flex flex-col max-h-[70vh]">
+                  <div className="px-5 py-4 shrink-0 flex items-center justify-between" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                      <div>
+                          <div className="text-[13px] font-semibold text-[#0f172a]">Park Edilmiş Sepetler</div>
+                          <div className="text-[10px] text-[#64748b] mt-0.5">{parklar.length} park edilmiş sepet</div>
+                      </div>
+                      <button onClick={() => setParkModalAcik(false)} className="text-[#64748b] hover:text-[#dc2626]"><i className="fas fa-times" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                      {parklar.length === 0 ? (
+                          <div className="p-8 text-center text-[11px] text-[#94a3b8] font-semibold uppercase tracking-widest">Park edilmiş sepet yok</div>
+                      ) : parklar.map((park, idx) => (
+                          <div key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-[#f8fafc] transition-colors" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-9 h-9 bg-amber-50 text-amber-600 flex items-center justify-center shrink-0"><i className="fas fa-pause-circle" /></div>
+                                  <div className="min-w-0">
+                                      <div className="text-[12px] font-semibold text-[#0f172a]">{park.sepet.length} ürün · <span className="text-[#1d4ed8] tabular-nums">{park.toplam.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span></div>
+                                      <div className="text-[10px] text-[#94a3b8]">Saat {park.saat}{park.musteriAdi ? ` · ${park.musteriAdi}` : ""}</div>
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                  <button onClick={() => parktanYukle(idx)} className="btn-primary text-[10px] px-2.5 py-1.5"><i className="fas fa-play mr-1" /> Yükle</button>
+                                  <button onClick={() => parkSil(idx)} className="btn-secondary text-[10px] px-2 py-1.5 text-[#dc2626]"><i className="fas fa-trash" /></button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+                  <div className="px-5 py-3 shrink-0 flex justify-end" style={{ borderTop: "1px solid var(--c-border)" }}>
+                      <button onClick={() => setParkModalAcik(false)} className="btn-secondary">Kapat</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
     </>
   );
 }

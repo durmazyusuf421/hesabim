@@ -261,24 +261,22 @@ export default function MusteriPortali() {
                               const tutar = miktar * gecerliFiyat;
 
                               return (
-                                  <tr key={u.id} onClick={() => setSeciliUrunId(u.id)} className={`cursor-pointer select-none ${isSelected ? 'bg-[#1d4ed8] text-white' : ''}`}>
-                                      {/* Sol Ok */}
+                                  <tr key={u.id} onClick={() => setSeciliUrunId(u.id)} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'bg-white hover:bg-slate-50'}`}>
                                       <td className="text-center">
-                                          {isSelected && <i className="fas fa-caret-right text-white"></i>}
+                                          {isSelected && <i className="fas fa-caret-right text-blue-500"></i>}
                                       </td>
 
-                                      <td>{u.id.toString().padStart(5, '0')}</td>
-                                      <td className="font-semibold">{u.urun_adi}</td>
+                                      <td className="text-slate-500">{u.id.toString().padStart(5, '0')}</td>
+                                      <td className="font-semibold text-[#0f172a]">{u.urun_adi}</td>
 
-                                      {/* Tedarikçi Adı */}
-                                      <td className={`font-semibold ${isSelected ? 'text-cyan-200' : 'text-cyan-700'}`}>{saticiFirma}</td>
+                                      <td className="font-semibold text-cyan-700">{saticiFirma}</td>
 
-                                      {/* AÇILIR MENÜ (SELECT) */}
                                       <td className="text-center">
                                           <select
                                               value={aktifBirimNo}
                                               onChange={(e) => setAktifBirimler({...aktifBirimler, [u.id]: Number(e.target.value)})}
-                                              className={`w-full px-1 py-0.5 text-[10px] font-semibold outline-none cursor-pointer ${isSelected ? 'bg-[#1e40af] text-white border-none' : 'input-kurumsal'}`}
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="input-kurumsal w-full px-1 py-0.5 text-[10px] font-semibold cursor-pointer"
                                           >
                                               <option value={-1}>{u.birim}</option>
                                               {u.alt_birimler && u.alt_birimler.map((ab: AltBirim, idx: number) => (
@@ -287,25 +285,23 @@ export default function MusteriPortali() {
                                           </select>
                                       </td>
 
-                                      {/* FİYAT */}
-                                      <td className={`text-right font-semibold ${isSelected ? 'text-white' : 'text-blue-700'}`}>
+                                      <td className="text-right font-semibold text-[#1d4ed8]">
                                           {Number(gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
                                       </td>
 
-                                      {/* MİKTAR GİRİŞ ALANI */}
                                       <td className="p-0">
                                           <input
                                               type="number"
                                               min="1"
                                               value={miktar || ''}
                                               onChange={(e) => sepeteEkle(u, Number(e.target.value), gecerliBirim, gecerliFiyat)}
+                                              onClick={(e) => e.stopPropagation()}
                                               placeholder="0"
-                                              className={`w-full h-full px-2 py-1 text-center font-semibold outline-none ${isSelected ? 'bg-[#1e40af] text-white placeholder-white/50' : 'bg-transparent focus:bg-white focus:ring-1 focus:ring-blue-400'}`}
+                                              className="w-full h-full px-2 py-1 text-center font-semibold outline-none bg-transparent focus:bg-white focus:ring-1 focus:ring-blue-400"
                                           />
                                       </td>
 
-                                      {/* TUTAR */}
-                                      <td className={`text-right font-semibold ${isSelected ? 'text-white' : ''}`}>
+                                      <td className="text-right font-semibold text-[#0f172a]">
                                           {tutar > 0 ? tutar.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : ''}
                                       </td>
                                   </tr>

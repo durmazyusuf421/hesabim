@@ -431,19 +431,15 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                     <td className="text-center">
                                                         {isSelected ? <i className="fas fa-caret-right text-blue-500"></i> : <i className="fas fa-caret-down text-transparent"></i>}
                                                     </td>
-                                                    <td className={`font-bold ${isSelected ? 'text-white' : 'text-slate-600'}`}>{s.siparis_no}</td>
-                                                    <td className={`font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>{s.cari_adi}</td>
+                                                    <td className="font-bold text-slate-600">{s.siparis_no}</td>
+                                                    <td className="font-bold text-slate-800">{s.cari_adi}</td>
                                                     <td className="text-center">
-                                                        {isSelected ? (
-                                                            <span className="text-white font-bold text-[10px] uppercase">{s.durum}</span>
-                                                        ) : (
-                                                            <span className={badge}>{s.durum}</span>
-                                                        )}
+                                                        <span className={badge}>{s.durum}</span>
                                                     </td>
-                                                    <td className={`text-right font-semibold ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                                    <td className="text-right font-semibold text-slate-800">
                                                         {parseTutar(s.toplam_tutar).toLocaleString('tr-TR', {minimumFractionDigits: 2})}
                                                     </td>
-                                                    <td className={`text-center ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>
+                                                    <td className="text-center text-slate-500">
                                                         {s.created_at ? new Date(s.created_at).toLocaleDateString('tr-TR') : '-'}
                                                     </td>
                                                     <td className="text-center">

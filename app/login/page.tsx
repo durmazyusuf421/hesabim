@@ -188,6 +188,7 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
     // Form State'leri
     const [eposta, setEposta] = useState("");
     const [sifre, setSifre] = useState("");
+    const [sifreGorunur, setSifreGorunur] = useState(false);
     const [telefon, setTelefon] = useState("");
     const [isletmeAdi, setIsletmeAdi] = useState(""); 
     const [unvan, setUnvan] = useState(""); 
@@ -387,7 +388,8 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 pl-1">Şifre</label>
                                 <div className="relative">
                                     <i className="fas fa-lock absolute left-5 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                                    <input type="password" value={sifre} onChange={(e) => setSifre(e.target.value)} placeholder="••••••••" className={`w-full pl-12 pr-5 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
+                                    <input type={sifreGorunur ? "text" : "password"} value={sifre} onChange={(e) => setSifre(e.target.value)} placeholder="••••••••" className={`w-full pl-12 pr-12 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
+                                    <button type="button" onClick={() => setSifreGorunur(!sifreGorunur)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"><i className={`fas ${sifreGorunur ? 'fa-eye' : 'fa-eye-slash'}`} /></button>
                                 </div>
                             </div>
                         </div>
@@ -462,7 +464,10 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                                 </div>
                                 <div>
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Sisteme Giriş Şifresi <span className="text-red-500">*</span></label>
-                                    <input type="password" value={sifre} onChange={(e) => setSifre(e.target.value)} placeholder="••••••••" className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
+                                    <div className="relative">
+                                        <input type={sifreGorunur ? "text" : "password"} value={sifre} onChange={(e) => setSifre(e.target.value)} placeholder="••••••••" className={`w-full px-4 pr-12 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
+                                        <button type="button" onClick={() => setSifreGorunur(!sifreGorunur)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"><i className={`fas ${sifreGorunur ? 'fa-eye' : 'fa-eye-slash'}`} /></button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
