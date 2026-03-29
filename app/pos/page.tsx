@@ -49,7 +49,7 @@ export default function PosEkrani() {
             ]);
             if (dbUrunler.data) setUrunler(dbUrunler.data);
             if (dbCariler.data) setCariler(dbCariler.data);
-        } catch (error) { console.error("Veri çekme hatası:", error); }
+        } catch { /* veri çekme hatası */ }
         setYukleniyor(false);
     }
 

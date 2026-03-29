@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase, siparisNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 
 interface Toptanci {
   id: number;
@@ -42,6 +43,7 @@ interface SepetItem extends Urun {
 export default function MusteriPortali() {
   const { aktifSirket: aktifMusteri } = useAuth();
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
 
   const [toptancilar, setToptancilar] = useState<Toptanci[]>([]);
   const [baglantilar, setBaglantilar] = useState<Baglanti[]>([]);
@@ -93,10 +95,16 @@ export default function MusteriPortali() {
 
   const istekGonder = async (toptanciId: number, toptanciAdi: string) => {
       if (!aktifMusteri) return;
-      if(window.confirm(`${toptanciAdi} firmasına çalışma isteği göndermek istiyor musunuz?`)) {
-          const { error } = await supabase.from("b2b_baglantilar").insert([{ toptanci_id: toptanciId, market_id: aktifMusteri.id, durum: 'BEKLIYOR' }]);
-          if (!error) { toast.success("İstek gönderildi."); verileriGetir(); }
-      }
+      onayla({
+          baslik: "Bağlantı İsteği",
+          mesaj: `${toptanciAdi} firmasına çalışma isteği göndermek istiyor musunuz?`,
+          tehlikeli: false,
+          onayMetni: "Evet, Gönder",
+          onOnayla: async () => {
+              const { error } = await supabase.from("b2b_baglantilar").insert([{ toptanci_id: toptanciId, market_id: aktifMusteri.id, durum: 'BEKLIYOR' }]);
+              if (!error) { toast.success("İstek gönderildi."); verileriGetir(); }
+          }
+      });
   };
 
   const sepeteEkle = (urun: Urun, miktar: number, gecerliBirim: string, gecerliFiyat: number) => {
@@ -435,6 +443,7 @@ export default function MusteriPortali() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

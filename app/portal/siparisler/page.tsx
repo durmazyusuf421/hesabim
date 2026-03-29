@@ -129,12 +129,12 @@ export default function MusteriSiparisleri() {
                           const isSelected = seciliSiparisId === s.id;
 
                           return (
-                              <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-[#0f172a] text-white' : ''}`}>
-                                  <td className="text-center">{isSelected && <i className="fas fa-caret-right text-white"></i>}</td>
+                              <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : 'bg-white hover:bg-slate-50'}`}>
+                                  <td className="text-center">{isSelected && <i className="fas fa-caret-right text-blue-500"></i>}</td>
                                   <td>{s.siparis_no}</td>
                                   <td className="font-semibold">{toptanciAdiBul(s.satici_sirket_id)}</td>
                                   <td className="text-center">{new Date(s.created_at).toLocaleDateString('tr-TR')}</td>
-                                  <td className="text-center">{isSelected ? <span className="text-white font-semibold">{s.durum}</span> : getDurumBadge(s.durum)}</td>
+                                  <td className="text-center">{getDurumBadge(s.durum)}</td>
                                   <td className="text-right font-semibold tabular-nums">{Number(s.toplam_tutar).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
                               </tr>
                           );

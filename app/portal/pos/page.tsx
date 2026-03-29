@@ -4,10 +4,12 @@ import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 
 export default function PosEkrani() {
   const { aktifSirket, kullanici } = useAuth();
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const [kullaniciAdi, setKullaniciAdi] = useState<string>("");
 
   // VERİTABANI STATELERİ
@@ -88,10 +90,17 @@ export default function PosEkrani() {
       barkodInputRef.current?.focus();
   };
 
-  const sepetiTemizle = () => { 
-      if(window.confirm("Satışı iptal etmek istediğinize emin misiniz?")) {
-          setSepet([]); setSeciliMusteriId(""); barkodInputRef.current?.focus(); 
-      }
+  const sepetiTemizle = () => {
+      onayla({
+          baslik: "Satış İptal",
+          mesaj: "Satışı iptal etmek istediğinize emin misiniz?",
+          altMesaj: "Sepetteki tüm ürünler silinecek.",
+          onayMetni: "Evet, İptal Et",
+          tehlikeli: true,
+          onOnayla: () => {
+              setSepet([]); setSeciliMusteriId(""); barkodInputRef.current?.focus();
+          }
+      });
   };
 
   const genelToplam = useMemo(() => {
@@ -162,11 +171,11 @@ export default function PosEkrani() {
   return (
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
-        <div className="flex-1 flex gap-4 p-4 overflow-hidden select-none">
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 p-2 lg:p-4 overflow-auto lg:overflow-hidden select-none">
           
           {/* SÜTUN 1: SEPET (SATIŞ FİŞİ) - MODERN & OKUNAKLI */}
-          <div className="w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
-              <div className="bg-slate-50 border-b border-slate-200 p-4 flex justify-between items-center z-10 shrink-0">
+          <div className="w-full lg:w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+              <div className="bg-slate-50 border-b border-slate-200 p-3 lg:p-4 flex flex-wrap justify-between items-center gap-2 z-10 shrink-0">
                   <h2 className="font-black text-slate-800 flex items-center tracking-tight">
                       <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mr-3"><i className="fas fa-shopping-cart"></i></div>
                       SATIŞ FİŞİ
@@ -176,7 +185,7 @@ export default function PosEkrani() {
                   </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto bg-white p-2">
+              <div className="flex-1 overflow-y-auto bg-white p-2 max-h-[40vh] lg:max-h-none">
                   {sepet.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
                           <i className="fas fa-barcode text-6xl opacity-50"></i>
@@ -216,14 +225,14 @@ export default function PosEkrani() {
               </div>
 
               {/* DEV GENEL TOPLAM ALANI */}
-              <div className="bg-slate-900 text-white p-6 shrink-0 relative overflow-hidden">
+              <div className="bg-slate-900 text-white p-4 lg:p-6 shrink-0 relative overflow-hidden sticky bottom-0 z-10">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl"></div>
                   <div className="flex justify-between items-end relative z-10">
                       <div>
                           <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ödenecek Tutar</p>
                           <p className="text-slate-500 font-semibold text-sm">Toplam {sepet.reduce((sum, item) => sum + item.miktar, 0)} Ürün</p>
                       </div>
-                      <div className="text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
+                      <div className="text-3xl lg:text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
                           {genelToplam.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-2xl text-emerald-600 align-super">TL</span>
                       </div>
                   </div>
@@ -231,7 +240,7 @@ export default function PosEkrani() {
           </div>
 
           {/* SÜTUN 2: BARKOD GİRİŞİ & NUMPAD & ÖDEME */}
-          <div className="w-[33%] flex flex-col gap-4">
+          <div className="w-full lg:w-[33%] flex flex-col gap-4">
               
               {/* Barkod Okutma Alanı */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 shrink-0 relative overflow-hidden group focus-within:border-blue-400 transition-colors">
@@ -253,10 +262,10 @@ export default function PosEkrani() {
               {/* Numpad (İri ve Dokunmatik Dostu) */}
               <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 grid grid-cols-3 grid-rows-4 gap-3">
                   {['7','8','9','4','5','6','1','2','3','C','0','Enter'].map((tus, index) => {
-                      let btnClass = "bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 active:bg-slate-200 rounded-xl flex items-center justify-center text-3xl font-black text-slate-700 transition-all shadow-sm";
-                      
-                      if (tus === 'Enter') btnClass = "bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl flex items-center justify-center text-white text-xl font-black uppercase tracking-widest transition-all shadow-md";
-                      if (tus === 'C') btnClass = "bg-red-50 border border-red-200 hover:bg-red-100 active:bg-red-200 rounded-xl flex items-center justify-center text-red-500 text-xl font-black uppercase tracking-widest transition-all shadow-sm";
+                      let btnClass = "min-h-[48px] bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 active:bg-slate-200 rounded-xl flex items-center justify-center text-3xl font-black text-slate-700 transition-all shadow-sm";
+
+                      if (tus === 'Enter') btnClass = "min-h-[48px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl flex items-center justify-center text-white text-xl font-black uppercase tracking-widest transition-all shadow-md";
+                      if (tus === 'C') btnClass = "min-h-[48px] bg-red-50 border border-red-200 hover:bg-red-100 active:bg-red-200 rounded-xl flex items-center justify-center text-red-500 text-xl font-black uppercase tracking-widest transition-all shadow-sm";
 
                       return (
                           <button key={index} onClick={() => numpadTikla(tus)} className={btnClass}>
@@ -267,24 +276,24 @@ export default function PosEkrani() {
               </div>
 
               {/* Ödeme Butonları (Klasik Renk Kodlaması) */}
-              <div className="grid grid-cols-2 grid-rows-2 gap-3 h-40 shrink-0">
-                  <button onClick={() => odemeAl("NAKIT")} disabled={islemYapiliyor || sepet.length === 0} className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
+              <div className="grid grid-cols-2 grid-rows-2 gap-3 h-40 lg:h-40 shrink-0">
+                  <button onClick={() => odemeAl("NAKIT")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-money-bill-wave text-2xl"></i> NAKİT
                   </button>
-                  <button onClick={() => odemeAl("KREDI_KARTI")} disabled={islemYapiliyor || sepet.length === 0} className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
+                  <button onClick={() => odemeAl("KREDI_KARTI")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-credit-card text-2xl"></i> K. KARTI
                   </button>
-                  <button onClick={() => odemeAl("VERESIYE")} disabled={islemYapiliyor || sepet.length === 0} className="bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
+                  <button onClick={() => odemeAl("VERESIYE")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-book text-2xl"></i> VERESİYE
                   </button>
-                  <button onClick={sepetiTemizle} disabled={sepet.length === 0} className="bg-slate-200 hover:bg-red-500 hover:text-white text-slate-600 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1 border border-slate-300 hover:border-red-600">
+                  <button onClick={sepetiTemizle} disabled={sepet.length === 0} className="py-4 bg-slate-200 hover:bg-red-500 hover:text-white text-slate-600 rounded-xl font-black text-sm uppercase tracking-widest shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1 border border-slate-300 hover:border-red-600">
                       <i className="fas fa-trash-alt text-xl"></i> İPTAL ET
                   </button>
               </div>
           </div>
 
           {/* SÜTUN 3: MÜŞTERİ, YENİ ÖZELLİKLER & İŞLEMLER */}
-          <div className="w-[25%] flex flex-col gap-4">
+          <div className="w-full lg:w-[25%] flex flex-col gap-4">
               
               {/* Müşteri Seçimi */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 shrink-0">
@@ -338,7 +347,7 @@ export default function PosEkrani() {
       {/* --- MANUEL ÜRÜN ARAMA MODALI --- */}
       {aramaModalAcik && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden border border-slate-300 h-[85vh]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden border border-slate-300 h-[90vh] lg:h-[85vh]">
             
             {/* Modal Header & Arama Çubuğu */}
             <div className="bg-slate-50 border-b border-slate-200 p-6 shrink-0 flex items-center gap-4">
@@ -392,6 +401,7 @@ export default function PosEkrani() {
         </div>
       )}
       </main>
+      <OnayModal />
     </>
   );
 }

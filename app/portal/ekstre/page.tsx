@@ -98,23 +98,23 @@ export default function MusteriEkstre() {
               </select>
           </div>
 
-          {/* METRIC BAR */}
-          <div className="metric-bar shrink-0">
-              <div className="metric-block">
-                  <div className="metric-label">Listelenen Hareket</div>
-                  <div className="metric-value">{hareketler.length}</div>
+          {/* ÖZET KARTLARI */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 shrink-0" style={{ background: "#f8fafc" }}>
+              <div className="bg-white border border-slate-200 p-3 border-l-4 border-l-blue-500">
+                  <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Listelenen Hareket</div>
+                  <div className="text-xl font-semibold text-slate-800">{hareketler.length}</div>
               </div>
-              <div className="metric-block">
-                  <div className="metric-label">Toplam Borç</div>
-                  <div className="metric-value negative">{toplamlar.topBorc.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div>
+              <div className="bg-white border border-slate-200 p-3 border-l-4 border-l-red-500">
+                  <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Borç</div>
+                  <div className="text-xl font-semibold text-[#dc2626]">{toplamlar.topBorc.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div>
               </div>
-              <div className="metric-block">
-                  <div className="metric-label">Toplam Alacak</div>
-                  <div className="metric-value" style={{ color: "#34d399" }}>{toplamlar.topAlacak.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div>
+              <div className="bg-white border border-slate-200 p-3 border-l-4 border-l-emerald-500">
+                  <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Alacak</div>
+                  <div className="text-xl font-semibold text-[#059669]">{toplamlar.topAlacak.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div>
               </div>
-              <div className="metric-block">
-                  <div className="metric-label">Güncel Bakiye</div>
-                  <div className={`metric-value ${toplamlar.bakiye > 0 ? "negative" : ""}`}>
+              <div className={`bg-white border border-slate-200 p-3 border-l-4 ${toplamlar.bakiye > 0 ? 'border-l-red-500' : toplamlar.bakiye < 0 ? 'border-l-emerald-500' : 'border-l-slate-300'}`}>
+                  <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Güncel Bakiye</div>
+                  <div className={`text-xl font-semibold ${toplamlar.bakiye > 0 ? 'text-[#dc2626]' : toplamlar.bakiye < 0 ? 'text-[#059669]' : 'text-slate-800'}`}>
                       {Math.abs(toplamlar.bakiye).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL {toplamlar.bakiye > 0 ? '(Borç)' : toplamlar.bakiye < 0 ? '(Alacak)' : ''}
                   </div>
               </div>
@@ -169,9 +169,9 @@ export default function MusteriEkstre() {
           </div>
 
           {/* FOOTER STATUS BAR */}
-          <div className="flex items-center justify-between px-4 shrink-0 print:hidden" style={{ height: "var(--footer-h)", background: "#0f172a", borderTop: "1px solid var(--c-border)", color: "var(--c-text-secondary)", fontSize: "10px", fontWeight: 600 }}>
+          <div className="flex items-center justify-between px-4 shrink-0 print:hidden" style={{ height: "var(--footer-h)", background: "white", borderTop: "1px solid var(--c-border)", color: "var(--c-text-secondary)", fontSize: "10px", fontWeight: 600 }}>
               <span>Listelenen Hareket: {hareketler.length}</span>
-              <span style={{ color: "#93c5fd" }}>Güncel Durum: {Math.abs(toplamlar.bakiye).toLocaleString('tr-TR')} TL {toplamlar.bakiye > 0 ? 'Borçlusunuz' : toplamlar.bakiye < 0 ? 'Alacaklısınız' : 'Kapalı'}</span>
+              <span className={toplamlar.bakiye > 0 ? 'text-[#dc2626]' : toplamlar.bakiye < 0 ? 'text-[#059669]' : ''}>Güncel Durum: {Math.abs(toplamlar.bakiye).toLocaleString('tr-TR')} TL {toplamlar.bakiye > 0 ? 'Borçlusunuz' : toplamlar.bakiye < 0 ? 'Alacaklısınız' : 'Kapalı'}</span>
           </div>
       </main>
   );

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 interface CariOzet { id: string; gercekId: number; tip: string; isim: string; bakiye: number; }
 interface Kalem { id: number; cinsi: string; adi: string; tutar: string; aciklama: string; }
 interface Evrak { islemTipi: string; seri: string; sira: string; tarih: string; cariId: string; cariAdi: string; bakiye: number; proje: string; personel: string; aciklama: string; }
@@ -31,6 +32,7 @@ const formatTutarString = (val: number): string => {
 export default function TahsilatErpSayfasi() {
     const { aktifSirket } = useAuth();
     const toast = useToast();
+    const { onayla, OnayModal } = useOnayModal();
     const [yukleniyor, setYukleniyor] = useState<boolean>(true);
     // Veri Stateleri
     const [cariler, setCariler] = useState<CariOzet[]>([]);
@@ -182,13 +184,20 @@ export default function TahsilatErpSayfasi() {
         setYukleniyor(false);
     };
 
-    const gecmisIslemSil = async (id: number) => {
-        if(window.confirm("Bu makbuzu silmek istediğinize emin misiniz? (Cari bakiye otomatik geri alınmaz, sadece makbuz iptal edilir)")) {
-            setYukleniyor(true);
-            await supabase.from("cari_hareketler").delete().eq("id", id);
-            verileriGetir(aktifSirket?.id || 0);
-            toast.success("Makbuz silindi.");
-        }
+    const gecmisIslemSil = (id: number) => {
+        onayla({
+            baslik: "Makbuz Sil",
+            mesaj: "Bu makbuzu silmek istediğinize emin misiniz?",
+            altMesaj: "Cari bakiye otomatik geri alınmaz, sadece makbuz iptal edilir.",
+            onayMetni: "Evet, Sil",
+            tehlikeli: true,
+            onOnayla: async () => {
+                setYukleniyor(true);
+                await supabase.from("cari_hareketler").delete().eq("id", id);
+                verileriGetir(aktifSirket?.id || 0);
+                toast.success("Makbuz silindi.");
+            }
+        });
     };
 
     const iyzicoOdemeBaslat = async () => {
@@ -322,7 +331,7 @@ export default function TahsilatErpSayfasi() {
                     <div className="px-4 py-1.5 bg-white -mb-[1px] font-semibold text-[#1d4ed8] z-10 cursor-pointer" style={{ border: "1px solid var(--c-border)", borderBottom: "1px solid white" }}>Kayıt Bilgileri (Kalemler)</div>
                 </div>
 
-                <div className="flex-1 bg-white mx-2 mb-2 relative overflow-auto" style={{ border: "1px solid var(--c-border)" }}>
+                <div className="flex-1 bg-white mx-2 mb-2 relative overflow-x-auto overflow-y-auto" style={{ border: "1px solid var(--c-border)" }}>
                     <table className="tbl-kurumsal min-w-[800px]">
                         <thead>
                             <tr>
@@ -410,8 +419,8 @@ export default function TahsilatErpSayfasi() {
 
             {/* IYZICO ÖDEME FORMU MODALI */}
             {iyzicoModalAcik && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-4">
-                    <div className="bg-white w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]" style={{ border: "1px solid var(--c-border)" }}>
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-0 md:p-4">
+                    <div className="bg-white w-full h-full md:h-auto md:max-w-lg overflow-hidden flex flex-col md:max-h-[90vh]" style={{ border: "1px solid var(--c-border)" }}>
                         <div className="p-3 flex justify-between items-center text-white shrink-0" style={{ background: "#059669", borderBottom: "1px solid var(--c-border)" }}>
                             <h3 className="text-sm font-semibold flex items-center uppercase tracking-widest">
                                 <i className="fas fa-credit-card mr-2"></i> Kredi Kartı ile Ödeme
@@ -431,13 +440,14 @@ export default function TahsilatErpSayfasi() {
             )}
 
             {gecmisModalAcik && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-                    <div className="bg-white w-full max-w-4xl overflow-hidden flex flex-col h-[80vh]" style={{ border: "1px solid var(--c-border)" }}>
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-0 md:p-4">
+                    <div className="bg-white w-full h-full md:h-[80vh] md:max-w-4xl overflow-hidden flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
                         <div className="p-3 flex justify-between items-center text-white shrink-0" style={{ background: "#1e293b", borderBottom: "1px solid var(--c-border)" }}>
                             <h3 className="text-sm font-semibold flex items-center uppercase tracking-widest"><i className="fas fa-history mr-2 text-orange-400"></i> Geçmiş Makbuz ve Hareketler</h3>
                             <button onClick={() => setGecmisModalAcik(false)} className="hover:text-red-400 transition-colors"><i className="fas fa-times text-lg"></i></button>
                         </div>
                         <div className="flex-1 overflow-auto p-4" style={{ background: "#f8fafc" }}>
+                          <div className="overflow-x-auto">
                             <table className="tbl-kurumsal min-w-[800px]">
                                 <thead>
                                     <tr>
@@ -473,10 +483,12 @@ export default function TahsilatErpSayfasi() {
                                     )}
                                 </tbody>
                             </table>
+                          </div>
                         </div>
                     </div>
                 </div>
             )}
+            <OnayModal />
         </>
     );
 }

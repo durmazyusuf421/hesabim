@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 
 interface KasaIslem {
   id: number;
@@ -18,6 +19,7 @@ interface KasaIslem {
 export default function MarketKasasi() {
   const { aktifSirket: aktifMusteri, kullanici } = useAuth();
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const [kullaniciAdi, setKullaniciAdi] = useState<string>("");
 
   const [islemler, setIslemler] = useState<KasaIslem[]>([]);
@@ -112,12 +114,19 @@ export default function MarketKasasi() {
       }
   };
 
-  const islemSil = async (id: number) => {
-      if(window.confirm("Bu kasa işlemini kalıcı olarak silmek istediğinize emin misiniz?")) {
-          await supabase.from("kasa_islemleri").delete().eq("id", id);
-          verileriGetir(aktifMusteri!.id);
-          toast.success("İşlem başarıyla silindi.");
-      }
+  const islemSil = (id: number) => {
+      onayla({
+          baslik: "Kasa İşlemi Sil",
+          mesaj: "Bu kasa işlemini kalıcı olarak silmek istediğinize emin misiniz?",
+          altMesaj: "Bu işlem geri alınamaz.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              await supabase.from("kasa_islemleri").delete().eq("id", id);
+              verileriGetir(aktifMusteri!.id);
+              toast.success("İşlem başarıyla silindi.");
+          }
+      });
   };
 
   const filtrelenmisIslemler = islemler.filter(i => (i.aciklama || "").toLowerCase().includes(aramaTerimi.toLowerCase()) || i.kategori.toLowerCase().includes(aramaTerimi.toLowerCase()));
@@ -143,24 +152,24 @@ export default function MarketKasasi() {
             </div>
         </div>
 
-        {/* ÖZET KARTLARI - metric-bar */}
-        <div className="metric-bar shrink-0">
-            <div className="metric-block">
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Toplam Kasa Bakiyesi</p>
+        {/* ÖZET KARTLARI */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 shrink-0" style={{ background: "var(--c-bg)" }}>
+            <div className="bg-white border-2 border-slate-300 border-l-4 border-l-blue-500 p-4">
+                <p className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Kasa Bakiyesi</p>
                 <h2 className={`text-2xl font-semibold ${kasaBakiye >= 0 ? 'text-[#059669]' : 'text-[#dc2626]'}`}>
-                    {kasaBakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-slate-400">TL</span>
+                    {kasaBakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-[#94a3b8]">TL</span>
                 </h2>
             </div>
-            <div className="metric-block">
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Bugünkü Gelir (Kasa Giriş)</p>
+            <div className="bg-white border-2 border-slate-300 border-l-4 border-l-emerald-500 p-4">
+                <p className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Bugünkü Gelir (Kasa Giriş)</p>
                 <h2 className="text-2xl font-semibold text-[#059669]">
-                    {gunlukGelir.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-slate-400">TL</span>
+                    {gunlukGelir.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-[#94a3b8]">TL</span>
                 </h2>
             </div>
-            <div className="metric-block">
-                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Bugünkü Gider (Kasa Çıkış)</p>
+            <div className="bg-white border-2 border-slate-300 border-l-4 border-l-red-500 p-4">
+                <p className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Bugünkü Gider (Kasa Çıkış)</p>
                 <h2 className="text-2xl font-semibold text-[#dc2626]">
-                    {gunlukGider.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-slate-400">TL</span>
+                    {gunlukGider.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-[#94a3b8]">TL</span>
                 </h2>
             </div>
         </div>
@@ -283,6 +292,7 @@ export default function MarketKasasi() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

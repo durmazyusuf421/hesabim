@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 interface FaturaKalemi { urun_adi: string; miktar: number; birim: string; birim_fiyat: number; kdv_orani: number; }
 interface FaturaFormState { fatura_no: string; tarih: string; cari_id: string; }
 interface FaturaRecord {
@@ -28,6 +29,7 @@ interface FirmaRecord {
 export default function FaturaMerkezi() {
   const { aktifSirket, kullaniciRol, isYonetici, isMuhasebe } = useAuth();
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const hasAccess = isYonetici || isMuhasebe; // Sadece Yönetici ve Muhasebe fatura kesebilir
 
   const [faturalar, setFaturalar] = useState<FaturaRecord[]>([]);
@@ -87,19 +89,26 @@ export default function FaturaMerkezi() {
 
   const sil = async () => {
       if (!seciliFaturaId) { toast.error("Lütfen listeden bir fatura seçin!"); return; }
-      if(window.confirm("Bu faturayı tamamen iptal edip silmek istediğinize emin misiniz? (Cari bakiye işlemi manuel düzeltilmelidir)")) {
-          try {
-              await supabase.from("fatura_kalemleri").delete().eq("fatura_id", seciliFaturaId);
-              const { error } = await supabase.from("faturalar").delete().eq("id", seciliFaturaId);
-              if (error) throw error;
-              toast.success("Fatura başarıyla silindi.");
-              setSeciliFaturaId(null);
-              if (aktifSirket) verileriGetir(aktifSirket.id);
-          } catch (error: unknown) {
-              const message = error instanceof Error ? error.message : String(error);
-              toast.error("Silme hatası: " + message);
+      onayla({
+          baslik: "Fatura Sil",
+          mesaj: "Bu faturayı iptal edip silmek istediğinize emin misiniz?",
+          altMesaj: "Cari bakiye işlemi manuel düzeltilmelidir.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              try {
+                  await supabase.from("fatura_kalemleri").delete().eq("fatura_id", seciliFaturaId);
+                  const { error } = await supabase.from("faturalar").delete().eq("id", seciliFaturaId);
+                  if (error) throw error;
+                  toast.success("Fatura başarıyla silindi.");
+                  setSeciliFaturaId(null);
+                  if (aktifSirket) verileriGetir(aktifSirket.id);
+              } catch (error: unknown) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  toast.error("Silme hatası: " + message);
+              }
           }
-      }
+      });
   };
 
   const satirEkle = () => setFaturaKalemleri([...faturaKalemleri, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
@@ -135,7 +144,7 @@ export default function FaturaMerkezi() {
               genel_toplam: gToplam,
               durum: 'BEKLIYOR'
           }]).select().single();
-          if (error) { toast.error("Fatura kaydedilemedi!"); return; }
+          if (error) { toast.error("Fatura kaydedilemedi: " + error.message); return; }
           islemYapilacakId = data.id;
 
           // CARİ BAKİYEYE OTOMATİK İŞLEME
@@ -344,6 +353,7 @@ export default function FaturaMerkezi() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

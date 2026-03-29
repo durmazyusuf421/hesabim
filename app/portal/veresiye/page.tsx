@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 
 interface VeresiyeMusteri {
   id: number;
@@ -26,6 +27,7 @@ interface VeresiyeHareket {
 export default function VeresiyeDefteri() {
   const { aktifSirket: aktifMusteri, kullanici } = useAuth();
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const [kullaniciAdi, setKullaniciAdi] = useState<string>("");
 
   const [musteriler, setMusteriler] = useState<VeresiyeMusteri[]>([]);
@@ -125,12 +127,19 @@ export default function VeresiyeDefteri() {
       const m = musteriler.find(x => x.id === seciliMusteriId);
       if (Number(m?.bakiye) !== 0) { toast.error("Bakiyesi sıfırlanmamış (borcu olan) müşteri silinemez!"); return; }
 
-      if(window.confirm("Bu müşteriyi silmek istediğinize emin misiniz?")) {
-          await supabase.from("veresiye_hareketler").delete().eq("musteri_id", seciliMusteriId);
-          await supabase.from("veresiye_musteriler").delete().eq("id", seciliMusteriId);
-          setSeciliMusteriId(null); if (aktifMusteri) verileriGetir(aktifMusteri.id);
-          toast.success("Müşteri başarıyla silindi.");
-      }
+      onayla({
+          baslik: "Müşteri Sil",
+          mesaj: "Bu müşteriyi silmek istediğinize emin misiniz?",
+          altMesaj: "Bu işlem geri alınamaz.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              await supabase.from("veresiye_hareketler").delete().eq("musteri_id", seciliMusteriId);
+              await supabase.from("veresiye_musteriler").delete().eq("id", seciliMusteriId);
+              setSeciliMusteriId(null); if (aktifMusteri) verileriGetir(aktifMusteri.id);
+              toast.success("Müşteri başarıyla silindi.");
+          }
+      });
   };
 
   // YENİ: GEÇMİŞİ GETİR FONKSİYONU
@@ -157,15 +166,15 @@ export default function VeresiyeDefteri() {
   return (
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
-        {/* METRIC BAR */}
-        <div className="metric-bar shrink-0">
-          <div className="metric-block">
-            <div className="metric-label">Toplam Alacak</div>
-            <div className="metric-value">{toplamAlacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</div>
+        {/* ÖZET KARTLARI */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 shrink-0" style={{ background: "#f8fafc" }}>
+          <div className="bg-white border border-slate-200 p-4 border-l-4 border-l-red-500">
+            <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Alacak</div>
+            <div className="text-2xl font-semibold text-[#dc2626]">{toplamAlacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-sm text-[#94a3b8]">TL</span></div>
           </div>
-          <div className="metric-block">
-            <div className="metric-label">Toplam Müşteri</div>
-            <div className="metric-value">{filtrelenmisMusteriler.length}</div>
+          <div className="bg-white border border-slate-200 p-4 border-l-4 border-l-blue-500">
+            <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Müşteri</div>
+            <div className="text-2xl font-semibold text-slate-800">{filtrelenmisMusteriler.length}</div>
           </div>
         </div>
 
@@ -182,50 +191,103 @@ export default function VeresiyeDefteri() {
           </div>
         </div>
 
-        {/* DATA GRID */}
-        <div className="flex-1 overflow-auto relative" style={{ background: "white" }}>
-            <table className="tbl-kurumsal" style={{ minWidth: 700 }}>
-                <thead>
-                    <tr>
-                        <th style={{ width: 32, textAlign: "center" }}><i className="fas fa-check"></i></th>
-                        <th>Müşteri Adı Soyadı</th>
-                        <th style={{ width: 160 }}>Telefon Numarası</th>
-                        <th style={{ width: 192 }}>Adres Bilgisi</th>
-                        <th style={{ width: 160, textAlign: "right" }}>Borç Bakiyesi</th>
-                        <th style={{ width: 128, textAlign: "center" }}>Detay / Geçmiş</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {yukleniyor ? (
-                        <tr><td colSpan={6} className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Müşteriler Yükleniyor...</td></tr>
-                    ) : filtrelenmisMusteriler.length === 0 ? (
-                        <tr><td colSpan={6} className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Kayıtlı Müşteri Bulunamadı</td></tr>
-                    ) : (
-                        filtrelenmisMusteriler.map((m) => {
-                            const isSelected = seciliMusteriId === m.id;
-                            const bakiye = Number(m.bakiye);
-                            return (
-                                <tr key={m.id} onClick={() => setSeciliMusteriId(m.id)} onDoubleClick={() => gecmisiGor(m.id)} className="cursor-pointer select-none" style={isSelected ? { background: "#1d4ed8", color: "white" } : {}}>
-                                    <td style={{ textAlign: "center" }}>{isSelected && <i className="fas fa-check-circle" style={{ color: "white" }}></i>}</td>
-                                    <td className="font-semibold">
-                                        <i className={`fas fa-user-circle mr-2 text-lg align-middle`} style={{ color: isSelected ? "rgba(255,255,255,0.5)" : "var(--c-border)" }}></i> {m.ad_soyad}
-                                    </td>
-                                    <td className="font-semibold">{m.telefon || '-'}</td>
-                                    <td className="text-xs truncate" style={{ maxWidth: 200 }}>{m.adres || '-'}</td>
-                                    <td className="font-semibold" style={{ textAlign: "right", color: isSelected ? "white" : (bakiye > 0 ? "#dc2626" : "#059669") }}>
-                                        {bakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
-                                    </td>
-                                    <td style={{ textAlign: "center" }}>
-                                        <button onClick={(e) => { e.stopPropagation(); gecmisiGor(m.id); }} className={isSelected ? "btn-primary" : "btn-secondary"} style={isSelected ? { background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" } : {}}>
-                                            <i className="fas fa-history mr-1"></i> İncele
-                                        </button>
-                                    </td>
-                                </tr>
-                            );
-                        })
-                    )}
-                </tbody>
-            </table>
+        {/* DATA GRID - Desktop Table */}
+        <div className="flex-1 overflow-auto relative hidden md:block" style={{ background: "white" }}>
+            <div className="overflow-x-auto">
+                <table className="tbl-kurumsal" style={{ minWidth: 700 }}>
+                    <thead>
+                        <tr>
+                            <th style={{ width: 32, textAlign: "center" }}><i className="fas fa-check"></i></th>
+                            <th>Müşteri Adı Soyadı</th>
+                            <th style={{ width: 160 }}>Telefon Numarası</th>
+                            <th style={{ width: 192 }}>Adres Bilgisi</th>
+                            <th style={{ width: 160, textAlign: "right" }}>Borç Bakiyesi</th>
+                            <th style={{ width: 128, textAlign: "center" }}>Detay / Geçmiş</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {yukleniyor ? (
+                            <tr><td colSpan={6} className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Müşteriler Yükleniyor...</td></tr>
+                        ) : filtrelenmisMusteriler.length === 0 ? (
+                            <tr><td colSpan={6} className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Kayıtlı Müşteri Bulunamadı</td></tr>
+                        ) : (
+                            filtrelenmisMusteriler.map((m) => {
+                                const isSelected = seciliMusteriId === m.id;
+                                const bakiye = Number(m.bakiye);
+                                return (
+                                    <tr key={m.id} onClick={() => setSeciliMusteriId(m.id)} onDoubleClick={() => gecmisiGor(m.id)} className="cursor-pointer select-none" style={isSelected ? { background: "#1d4ed8", color: "white" } : {}}>
+                                        <td style={{ textAlign: "center" }}>{isSelected && <i className="fas fa-check-circle" style={{ color: "white" }}></i>}</td>
+                                        <td className="font-semibold">
+                                            <i className={`fas fa-user-circle mr-2 text-lg align-middle`} style={{ color: isSelected ? "rgba(255,255,255,0.5)" : "var(--c-border)" }}></i> {m.ad_soyad}
+                                        </td>
+                                        <td className="font-semibold">{m.telefon || '-'}</td>
+                                        <td className="text-xs truncate" style={{ maxWidth: 200 }}>{m.adres || '-'}</td>
+                                        <td className="font-semibold" style={{ textAlign: "right", color: isSelected ? "white" : (bakiye > 0 ? "#dc2626" : "#059669") }}>
+                                            {bakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
+                                        </td>
+                                        <td style={{ textAlign: "center" }}>
+                                            <button onClick={(e) => { e.stopPropagation(); gecmisiGor(m.id); }} className={isSelected ? "btn-primary" : "btn-secondary"} style={isSelected ? { background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" } : {}}>
+                                                <i className="fas fa-history mr-1"></i> İncele
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {/* DATA GRID - Mobile Card View */}
+        <div className="flex-1 overflow-auto md:hidden space-y-2 p-3" style={{ background: "white" }}>
+            {yukleniyor ? (
+                <div className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Müşteriler Yükleniyor...</div>
+            ) : filtrelenmisMusteriler.length === 0 ? (
+                <div className="p-10 text-center font-semibold uppercase tracking-widest" style={{ color: "var(--c-text-muted)" }}>Kayıtlı Müşteri Bulunamadı</div>
+            ) : (
+                filtrelenmisMusteriler.map((m) => {
+                    const isSelected = seciliMusteriId === m.id;
+                    const bakiye = Number(m.bakiye);
+                    return (
+                        <div
+                            key={m.id}
+                            onClick={() => setSeciliMusteriId(m.id)}
+                            className="p-3 border cursor-pointer select-none transition-colors"
+                            style={isSelected ? { background: "#1d4ed8", color: "white", borderColor: "#1d4ed8" } : { borderColor: "var(--c-border)", background: "#f8fafc" }}
+                        >
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <i className="fas fa-user-circle text-lg" style={{ color: isSelected ? "rgba(255,255,255,0.5)" : "var(--c-border)" }}></i>
+                                    <span className="font-semibold text-[13px]">{m.ad_soyad}</span>
+                                </div>
+                                {isSelected && <i className="fas fa-check-circle" style={{ color: "white" }}></i>}
+                            </div>
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[12px] font-semibold" style={{ color: isSelected ? "white" : (bakiye > 0 ? "#dc2626" : "#059669") }}>
+                                    {bakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
+                                </span>
+                                {m.telefon && (
+                                    <span className="text-[11px]" style={{ color: isSelected ? "rgba(255,255,255,0.7)" : "var(--c-text-secondary)" }}>
+                                        <i className="fas fa-phone mr-1"></i>{m.telefon}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); gecmisiGor(m.id); }} className={isSelected ? "btn-primary text-[11px] px-2 py-1" : "btn-secondary text-[11px] px-2 py-1"} style={isSelected ? { background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)" } : {}}>
+                                    <i className="fas fa-history mr-1"></i> İncele
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); setSeciliMusteriId(m.id); islemBaslat("BORCLANDIRMA"); }} className="text-[11px] px-2 py-1" style={{ background: "#dc2626", color: "white", border: "none", fontWeight: 600 }}>
+                                    <i className="fas fa-cart-plus mr-1"></i> Borç
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); setSeciliMusteriId(m.id); islemBaslat("TAHSILAT"); }} className="text-[11px] px-2 py-1" style={{ background: "#059669", color: "white", border: "none", fontWeight: 600 }}>
+                                    <i className="fas fa-hand-holding-usd mr-1"></i> Ödeme
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })
+            )}
         </div>
 
         {/* ALT DURUM ÇUBUĞU */}
@@ -256,6 +318,7 @@ export default function VeresiyeDefteri() {
             </div>
 
             <div className="p-4 space-y-4 overflow-y-auto" style={{ background: "white" }}>
+              <div className="overflow-x-auto">
                 <table className="tbl-kurumsal" style={{ minWidth: 600 }}>
                     <thead>
                         <tr>
@@ -293,9 +356,10 @@ export default function VeresiyeDefteri() {
                         )}
                     </tbody>
                 </table>
+              </div>
             </div>
 
-            <div className="p-3 flex justify-end space-x-2 shrink-0" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
+            <div className="p-3 flex flex-wrap justify-end gap-2 shrink-0" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
                 <button onClick={() => window.print()} className="btn-secondary whitespace-nowrap">
                     <i className="fas fa-print mr-2"></i> Ekstreyi Yazdır
                 </button>
@@ -382,6 +446,7 @@ export default function VeresiyeDefteri() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

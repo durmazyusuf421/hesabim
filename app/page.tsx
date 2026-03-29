@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase, siparisNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 interface Siparis {
     id: number;
     siparis_no: string;
@@ -29,6 +30,7 @@ const parseTutar = (val: string | number | null | undefined): number => {
 
 export default function SiparislerSayfasi() {
     const toast = useToast();
+    const { onayla, OnayModal } = useOnayModal();
     const { aktifSirket, kullaniciRol, isYonetici, isPlasiyer, isDepocu, isMuhasebe } = useAuth();
 
     const [siparisler, setSiparisler] = useState<Siparis[]>([]);
@@ -190,7 +192,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
         const eskiDurum = mevcutSiparis?.durum;
 
         const { error } = await supabase.from("siparisler").update({ durum: yeniDurum }).eq("id", hedefId);
-        if (error) { toast.error("Durum güncellenirken hata oluştu."); return; }
+        if (error) { toast.error("Durum güncellenirken hata: " + error.message); return; }
 
         // STOK YÖNETİMİ
         if (yeniDurum === "HAZIRLANIYOR" && eskiDurum !== "HAZIRLANIYOR") {
@@ -284,13 +286,20 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
 
     const siparisSil = async () => {
         if (!seciliSiparisId) { toast.error("Lütfen silmek için bir sipariş seçin!"); return; }
-        if (window.confirm("Bu siparişi kalıcı olarak silmek istediğinize emin misiniz?")) {
-            setYukleniyor(true);
-            await supabase.from("siparis_kalemleri").delete().eq("siparis_id", seciliSiparisId);
-            await supabase.from("siparisler").delete().eq("id", seciliSiparisId);
-            setSeciliSiparisId(null);
-            if (aktifSirket) verileriGetir(aktifSirket.id);
-        }
+        onayla({
+            baslik: "Sipariş Sil",
+            mesaj: "Bu siparişi kalıcı olarak silmek istediğinize emin misiniz?",
+            altMesaj: "Bu işlem geri alınamaz.",
+            onayMetni: "Evet, Sil",
+            tehlikeli: true,
+            onOnayla: async () => {
+                setYukleniyor(true);
+                await supabase.from("siparis_kalemleri").delete().eq("siparis_id", seciliSiparisId);
+                await supabase.from("siparisler").delete().eq("id", seciliSiparisId);
+                setSeciliSiparisId(null);
+                if (aktifSirket) verileriGetir(aktifSirket.id);
+            }
+        });
     };
 
     const filtrelenmisSiparisler = siparisler.filter(s =>
@@ -365,8 +374,37 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                             </div>
                         </div>
 
+                        {/* MOBİL KART GÖRÜNÜMÜ */}
+                        <div className="md:hidden flex-1 overflow-auto relative print:hidden">
+                            {yukleniyor ? (
+                                <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</div>
+                            ) : filtrelenmisSiparisler.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Sipariş Bulunamadı</div>
+                            ) : (
+                                <div className="space-y-2 p-3">
+                                    {filtrelenmisSiparisler.map((s) => {
+                                        const isSelected = seciliSiparisId === s.id;
+                                        return (
+                                            <div key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={() => detayAc(s)}
+                                                className={`bg-white border p-3 cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50 border-l-4' : 'border-slate-200 hover:bg-slate-50'}`}>
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className="text-[12px] font-semibold text-[#1d4ed8]">{s.siparis_no || '#' + s.id}</span>
+                                                    <span className={getDurumBadge(s.durum)}>{s.durum}</span>
+                                                </div>
+                                                <div className="text-[12px] font-semibold text-[#0f172a] mb-1">{s.cari_adi}</div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[11px] text-[#94a3b8]">{s.created_at ? new Date(s.created_at).toLocaleDateString('tr-TR') : '-'}</span>
+                                                    <span className="text-[13px] font-semibold text-[#0f172a] tabular-nums">{parseTutar(s.toplam_tutar).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
                         {/* TABLO (GRID) ALANI */}
-                        <div className="flex-1 overflow-auto relative print:hidden">
+                        <div className="hidden md:block flex-1 overflow-auto relative print:hidden">
                             <table className="tbl-kurumsal">
                                 <thead>
                                     <tr>
@@ -389,9 +427,9 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                             const isSelected = seciliSiparisId === s.id;
                                             const badge = getDurumBadge(s.durum);
                                             return (
-                                                <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={() => detayAc(s)} className={`cursor-pointer select-none ${isSelected ? 'bg-[#0f172a] text-white' : 'hover:bg-slate-50'}`}>
+                                                <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={() => detayAc(s)} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 text-slate-800' : 'bg-white hover:bg-slate-50'}`}>
                                                     <td className="text-center">
-                                                        {isSelected ? <i className="fas fa-caret-right text-white"></i> : <i className="fas fa-caret-down text-transparent"></i>}
+                                                        {isSelected ? <i className="fas fa-caret-right text-blue-500"></i> : <i className="fas fa-caret-down text-transparent"></i>}
                                                     </td>
                                                     <td className={`font-bold ${isSelected ? 'text-white' : 'text-slate-600'}`}>{s.siparis_no}</td>
                                                     <td className={`font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>{s.cari_adi}</td>
@@ -729,6 +767,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                     </div>
                 </div>
             )}
+            <OnayModal />
         </>
     );
 }

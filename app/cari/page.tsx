@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 
 interface CariOzet { id: string; gercekId: number; tip: string; isim: string; bakiye: number; telefon?: string; }
 interface HareketKaydi { id: string; tarih: string; islemTipi: string; aciklama: string; borc: number; alacak: number; kategori: 'SIPARIS' | 'ODEME'; }
@@ -33,6 +34,7 @@ const formatTutar = (val: number): string => {
 export default function CariKartlarSayfasi() {
     const { aktifSirket } = useAuth();
     const toast = useToast();
+    const { onayla, OnayModal } = useOnayModal();
     const [yukleniyor, setYukleniyor] = useState<boolean>(true);
     const [cariler, setCariler] = useState<CariOzet[]>([]);
     const [aramaMetni, setAramaMetni] = useState("");
@@ -128,7 +130,7 @@ export default function CariKartlarSayfasi() {
     const b2bDurumGuncelle = async (id: number, yeniDurum: string) => {
         setB2bIslemYapiliyor(true);
         const { error } = await supabase.from("b2b_baglantilar").update({ durum: yeniDurum }).eq("id", id);
-        if (error) { toast.error("Güncelleme hatası!"); }
+        if (error) { toast.error("Güncelleme hatası: " + error.message); }
         else {
             toast.success(yeniDurum === "ONAYLANDI" ? "Bağlantı isteği onaylandı!" : "Bağlantı isteği reddedildi.");
             setB2bDetayModalAcik(false);
@@ -170,22 +172,30 @@ export default function CariKartlarSayfasi() {
         setIslemBekliyor(false);
     };
 
-    const cariSil = async (cari: CariOzet) => {
-        if (!window.confirm(`DİKKAT!\n\n"${cari.isim}" isimli cariyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz!`)) return;
-        setYukleniyor(true);
-        try {
-            if (cari.tip === 'firma') {
-                const { error } = await supabase.from('firmalar').delete().eq('id', cari.gercekId);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase.from('cari_kartlar').delete().eq('id', cari.gercekId);
-                if (error) throw error;
+    const cariSil = (cari: CariOzet) => {
+        onayla({
+            baslik: "Cari Kartı Sil",
+            mesaj: `"${cari.isim}" silinecek`,
+            altMesaj: "Bu işlem geri alınamaz. Cari karta ait tüm hareketler de etkilenecektir.",
+            onayMetni: "Evet, Sil",
+            tehlikeli: true,
+            onOnayla: async () => {
+                setYukleniyor(true);
+                try {
+                    if (cari.tip === 'firma') {
+                        const { error } = await supabase.from('firmalar').delete().eq('id', cari.gercekId);
+                        if (error) throw error;
+                    } else {
+                        const { error } = await supabase.from('cari_kartlar').delete().eq('id', cari.gercekId);
+                        if (error) throw error;
+                    }
+                    toast.success("Cari başarıyla silindi.");
+                    if (!aktifSirket) return;
+                    verileriGetir(aktifSirket.id);
+                } catch (error) { toast.error(`Silme başarısız! Muhtemelen bu cariye ait geçmiş sipariş veya tahsilat kayıtları mevcut. Sistem Hatası: ${error instanceof Error ? error.message : String(error)}`); }
+                setYukleniyor(false);
             }
-            toast.success("Cari başarıyla silindi.");
-            if (!aktifSirket) return;
-            verileriGetir(aktifSirket.id);
-        } catch (error) { toast.error(`Silme başarısız! Muhtemelen bu cariye ait geçmiş sipariş veya tahsilat kayıtları mevcut. Sistem Hatası: ${error instanceof Error ? error.message : String(error)}`); }
-        setYukleniyor(false);
+        });
     };
 
     const cariHareketleriGetir = async (cari: CariOzet) => {
@@ -267,7 +277,39 @@ export default function CariKartlarSayfasi() {
 
                 {/* CARİ LİSTESİ TABLOSU */}
                 {sayfaSekme === "cariler" && <div className="flex-1 overflow-auto p-4 custom-scrollbar">
-                    <div className="card-kurumsal overflow-hidden">
+                    {/* MOBİL KART GÖRÜNÜMÜ */}
+                    <div className="md:hidden space-y-2 p-3">
+                        {filtrelenmisCariler.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 font-semibold">Listelenecek Müşteri/Cari Bulunamadı.</div>
+                        ) : (
+                            filtrelenmisCariler.map((cari) => (
+                                <div key={cari.id} className="bg-white border border-slate-200 p-3 hover:bg-slate-50">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="text-[12px] font-semibold text-[#0f172a]">{cari.isim}</span>
+                                        <span className={`px-2 py-0.5 text-[9px] font-semibold uppercase ${cari.tip === 'firma' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-700'}`}>
+                                            {cari.tip === 'firma' ? 'B2B Firma' : 'Bireysel'}
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] text-[#64748b]">{cari.telefon || 'Telefon bilgisi yok'}</div>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => cariHareketleriGetir(cari)} className="btn-secondary flex items-center text-[10px]">
+                                                <i className="fas fa-list-alt mr-1"></i> Ekstre
+                                            </button>
+                                            <button onClick={() => cariSil(cari)} className="btn-secondary text-[#dc2626] text-[10px]" style={{ borderColor: "#fecaca" }} title="Cariyi Sil">
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                        <span className={`text-[12px] font-semibold tabular-nums ${cari.bakiye > 0 ? 'text-[#dc2626]' : (cari.bakiye < 0 ? 'text-[#059669]' : 'text-slate-500')}`}>
+                                            {formatTutar(cari.bakiye)} ₺
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    {/* MASAÜSTÜ TABLO GÖRÜNÜMÜ */}
+                    <div className="hidden md:block card-kurumsal overflow-hidden">
                         <table className="tbl-kurumsal min-w-[700px]">
                             <thead>
                                 <tr>
@@ -283,7 +325,7 @@ export default function CariKartlarSayfasi() {
                                     <tr><td colSpan={5} className="p-8 text-center text-slate-400 font-semibold">Listelenecek Müşteri/Cari Bulunamadı.</td></tr>
                                 ) : (
                                     filtrelenmisCariler.map((cari, idx) => (
-                                        <tr key={cari.id} className="group">
+                                        <tr key={cari.id} className="group bg-white hover:bg-slate-50">
                                             <td className="text-center text-slate-400 font-semibold">{idx + 1}</td>
                                             <td className="font-semibold text-slate-800 group-hover:text-[#1d4ed8]">{cari.isim}</td>
                                             <td className="text-center">
@@ -337,7 +379,7 @@ export default function CariKartlarSayfasi() {
                                         {b2bIstekler.map((istek, idx) => {
                                             const tarih = istek.created_at ? new Date(istek.created_at) : null;
                                             return (
-                                                <tr key={istek.id}>
+                                                <tr key={istek.id} className="bg-white hover:bg-slate-50">
                                                     <td className="text-center text-slate-400 font-semibold">{idx + 1}</td>
                                                     <td>
                                                         <div className="flex items-center gap-2">
@@ -632,7 +674,7 @@ export default function CariKartlarSayfasi() {
                                                     const isSiparis = h.kategori === 'SIPARIS';
                                                     const isTahsilat = h.islemTipi === "Tahsilat";
                                                     return (
-                                                        <tr key={h.id}>
+                                                        <tr key={h.id} className="bg-white hover:bg-slate-50">
                                                             <td className="font-medium text-slate-500">{d.toLocaleDateString('tr-TR')} <span className="text-[9px] ml-1">{d.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</span></td>
                                                             <td className="text-center"><span className={`px-2 py-0.5 font-semibold uppercase text-[9px] ${isSiparis ? 'bg-blue-100 text-[#1d4ed8]' : (isTahsilat ? 'bg-emerald-100 text-[#059669]' : 'bg-orange-100 text-orange-700')}`}>{h.islemTipi}</span></td>
                                                             <td className="font-semibold">{h.aciklama}</td>
@@ -650,6 +692,7 @@ export default function CariKartlarSayfasi() {
                     </div>
                 </div>
             )}
+            <OnayModal />
         </>
     );
 }

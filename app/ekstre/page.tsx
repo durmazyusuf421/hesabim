@@ -163,10 +163,10 @@ export default function CariEkstre() {
                             <input type="date" value={bitisTarih} onChange={(e) => setBitisTarih(e.target.value)} className="input-kurumsal w-36" />
                         </>
                     )}
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="ml-auto flex items-center gap-2 flex-wrap">
                         <Link href="/tahsilat" className="btn-primary flex items-center gap-2" style={{ background: "#059669" }}><i className="fas fa-money-bill-wave text-[10px]" /> TAHSİLAT</Link>
-                        <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2"><i className="fas fa-print text-[10px]" /> YAZDIR</button>
-                        <button onClick={excelExport} disabled={filtrelenmisHareketler.length === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40"><i className="fas fa-file-excel text-[#059669] text-[10px]" /> EXCEL</button>
+                        <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 hidden sm:flex"><i className="fas fa-print text-[10px]" /> YAZDIR</button>
+                        <button onClick={excelExport} disabled={filtrelenmisHareketler.length === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40 hidden sm:flex"><i className="fas fa-file-excel text-[#059669] text-[10px]" /> EXCEL</button>
                         {(aramaTerimi || baslangicTarih || bitisTarih) && (
                             <button onClick={filtreTemizle} className="btn-secondary flex items-center gap-2 text-[#dc2626]"><i className="fas fa-times text-[10px]" /> TEMİZLE</button>
                         )}
@@ -187,14 +187,52 @@ export default function CariEkstre() {
                             </div>
 
                             {/* ÖZET KARTLARI */}
-                            <div className="metric-bar shrink-0 mb-6">
-                                <div className="metric-block"><div className="metric-label">Toplam Müşteri</div><div className="metric-value">{firmalar.length}</div></div>
-                                <div className="metric-block"><div className="metric-label">Toplam Alacak</div><div className="metric-value negative">{firmalar.filter(f => (Number(f.bakiye) || 0) > 0).reduce((acc, f) => acc + (Number(f.bakiye) || 0), 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div></div>
-                                <div className="metric-block"><div className="metric-label">Bakiyesi Kapalı</div><div className="metric-value">{firmalar.filter(f => (Number(f.bakiye) || 0) === 0).length} <span className="text-sm text-slate-400">müşteri</span></div></div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                                <div className="bg-white border border-slate-200 p-4">
+                                    <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Müşteri</div>
+                                    <div className="text-xl font-semibold text-[#0f172a]">{firmalar.length}</div>
+                                </div>
+                                <div className="bg-white border border-slate-200 p-4">
+                                    <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Alacak</div>
+                                    <div className="text-xl font-semibold text-[#dc2626]">{firmalar.filter(f => (Number(f.bakiye) || 0) > 0).reduce((acc, f) => acc + (Number(f.bakiye) || 0), 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</div>
+                                </div>
+                                <div className="bg-white border border-slate-200 p-4">
+                                    <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Bakiyesi Kapalı</div>
+                                    <div className="text-xl font-semibold text-[#059669]">{firmalar.filter(f => (Number(f.bakiye) || 0) === 0).length} <span className="text-sm text-[#94a3b8]">müşteri</span></div>
+                                </div>
                             </div>
 
                             {/* MÜŞTERİ LİSTESİ */}
-                            <div className="overflow-auto">
+                            {/* MOBİL KART GÖRÜNÜMÜ */}
+                            <div className="md:hidden space-y-2">
+                                {filtrelenmisFirmalar.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Kayıtlı Müşteri Bulunamadı</div>
+                                ) : (
+                                    filtrelenmisFirmalar.map(f => {
+                                        const bakiye = Number(f.bakiye) || 0;
+                                        return (
+                                            <div key={f.id} className="bg-white border border-slate-200 p-3 hover:bg-slate-50">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="text-[12px] font-semibold text-[#0f172a]">{f.unvan}</span>
+                                                    <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest ${bakiye > 0 ? 'bg-red-50 text-[#dc2626]' : bakiye < 0 ? 'bg-emerald-50 text-[#059669]' : 'text-slate-400'}`} style={{ background: bakiye === 0 ? '#f8fafc' : undefined }}>
+                                                        {bakiye > 0 ? 'Borclu' : bakiye < 0 ? 'Alacakli' : 'Kapali'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center mt-2">
+                                                    <button onClick={() => setSeciliFirmaId(f.id.toString())} className="btn-primary text-[10px]">
+                                                        <i className="fas fa-clipboard-list mr-1"></i> Ekstre
+                                                    </button>
+                                                    <span className={`text-[12px] font-semibold tabular-nums ${bakiye > 0 ? 'text-[#dc2626]' : bakiye < 0 ? 'text-[#059669]' : 'text-slate-400'}`}>
+                                                        {bakiye !== 0 ? Math.abs(bakiye).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' TL' : '0,00 TL'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                            {/* MASAÜSTÜ TABLO GÖRÜNÜMÜ */}
+                            <div className="hidden md:block overflow-auto">
                                 <table className="tbl-kurumsal min-w-[600px]">
                                     <thead>
                                         <tr>
@@ -239,11 +277,23 @@ export default function CariEkstre() {
                     /* SEÇİLİ MÜŞTERİ EKSTRESİ */
                     <>
                         {/* ÖZET KARTLARI */}
-                        <div className="metric-bar shrink-0 print:hidden">
-                            <div className="metric-block"><div className="metric-label">Müşteri</div><div className="metric-value truncate">{seciliFirmaAd}</div></div>
-                            <div className="metric-block"><div className="metric-label">Toplam Borç</div><div className="metric-value negative">{ozet.toplamBorc.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div></div>
-                            <div className="metric-block"><div className="metric-label">Toplam Alacak</div><div className="metric-value" style={{ color: "#059669" }}>{ozet.toplamAlacak.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div></div>
-                            <div className="metric-block"><div className="metric-label">Net Bakiye</div><div className={`metric-value ${ozet.netBakiye > 0 ? 'negative' : ''}`} style={{ color: ozet.netBakiye > 0 ? '#dc2626' : ozet.netBakiye < 0 ? '#059669' : undefined }}>{Math.abs(ozet.netBakiye).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {ozet.netBakiye > 0 ? '(B)' : ozet.netBakiye < 0 ? '(A)' : ''}</div></div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 shrink-0 print:hidden" style={{ background: "var(--c-bg)" }}>
+                            <div className="bg-white border border-slate-200 p-3">
+                                <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Müşteri</div>
+                                <div className="text-sm font-semibold text-[#0f172a] truncate">{seciliFirmaAd}</div>
+                            </div>
+                            <div className="bg-white border border-slate-200 p-3">
+                                <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Borç</div>
+                                <div className="text-lg font-semibold text-[#dc2626]">{ozet.toplamBorc.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className="bg-white border border-slate-200 p-3">
+                                <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Toplam Alacak</div>
+                                <div className="text-lg font-semibold text-[#059669]">{ozet.toplamAlacak.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className={`bg-white border p-3 ${ozet.netBakiye > 0 ? 'border-[#dc2626]/30' : ozet.netBakiye < 0 ? 'border-[#059669]/30' : 'border-slate-200'}`}>
+                                <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest mb-1">Net Bakiye</div>
+                                <div className={`text-lg font-semibold ${ozet.netBakiye > 0 ? 'text-[#dc2626]' : ozet.netBakiye < 0 ? 'text-[#059669]' : 'text-[#94a3b8]'}`}>{Math.abs(ozet.netBakiye).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} {ozet.netBakiye > 0 ? '(B)' : ozet.netBakiye < 0 ? '(A)' : ''}</div>
+                            </div>
                         </div>
 
                         {/* EKSTRE TABLOSU */}
@@ -256,53 +306,100 @@ export default function CariEkstre() {
                                 {(baslangicTarih || bitisTarih) && <p className="text-xs mt-1">Dönem: {baslangicTarih || '...'} — {bitisTarih || '...'}</p>}
                             </div>
 
-                            <table className="tbl-kurumsal whitespace-nowrap min-w-[700px]">
-                                <thead>
-                                    <tr>
-                                        <th className="w-24">Tarih</th>
-                                        <th className="w-32">Evrak No</th>
-                                        <th className="w-36">İşlem Türü</th>
-                                        <th>Açıklama</th>
-                                        <th className="w-28 text-right">Borç (TL)</th>
-                                        <th className="w-28 text-right">Alacak (TL)</th>
-                                        <th className="w-32 text-right">Bakiye</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {yukleniyor ? (
-                                        <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Veriler Yükleniyor...</td></tr>
-                                    ) : filtrelenmisHareketler.length === 0 ? (
-                                        <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">{hareketler.length > 0 ? 'FİLTREYE UYGUN HAREKET BULUNAMADI' : 'HESAP HAREKETİ BULUNMUYOR'}</td></tr>
-                                    ) : (
-                                        <>
-                                            {filtrelenmisHareketler.map((h, index) => {
-                                                const borc = Number(h.borc) || 0;
-                                                const alacak = Number(h.alacak) || 0;
-                                                const bakiye = bakiyeHaritasi[index] || 0;
+                            {/* MOBİL KART GÖRÜNÜMÜ */}
+                            <div className="md:hidden space-y-2 p-3">
+                                {yukleniyor ? (
+                                    <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Veriler Yükleniyor...</div>
+                                ) : filtrelenmisHareketler.length === 0 ? (
+                                    <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">{hareketler.length > 0 ? 'FİLTREYE UYGUN HAREKET BULUNAMADI' : 'HESAP HAREKETİ BULUNMUYOR'}</div>
+                                ) : (
+                                    <>
+                                        {filtrelenmisHareketler.map((h, index) => {
+                                            const borc = Number(h.borc) || 0;
+                                            const alacak = Number(h.alacak) || 0;
+                                            const bakiye = bakiyeHaritasi[index] || 0;
+                                            return (
+                                                <div key={index} className={`bg-white border border-slate-200 p-3 hover:bg-slate-50 ${borc > 0 ? 'border-l-2 border-l-[#dc2626]' : alacak > 0 ? 'border-l-2 border-l-[#059669]' : ''}`}>
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className="text-[12px] font-semibold text-[#0f172a]">{h.islem_tipi}</span>
+                                                        <span className="text-[11px] text-[#94a3b8]">{new Date(h.tarih).toLocaleDateString('tr-TR')}</span>
+                                                    </div>
+                                                    <div className="text-[11px] text-[#64748b] truncate">{h.aciklama || '-'} {h.evrak_no ? `| ${h.evrak_no}` : ''}</div>
+                                                    <div className="flex justify-between items-center mt-2">
+                                                        <div className="flex gap-3">
+                                                            {borc > 0 && <span className="text-[11px] font-semibold text-[#dc2626]">B: {borc.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</span>}
+                                                            {alacak > 0 && <span className="text-[11px] font-semibold text-[#059669]">A: {alacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</span>}
+                                                        </div>
+                                                        <span className="text-[12px] font-semibold tabular-nums text-[#1d4ed8]">{Math.abs(bakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {bakiye > 0 ? '(B)' : bakiye < 0 ? '(A)' : ''}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {/* MOBİL TOPLAM KARTI */}
+                                        <div className="bg-slate-50 border-2 border-slate-300 p-3">
+                                            <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">TOPLAM</div>
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex gap-3">
+                                                    <span className="text-[11px] font-semibold text-[#dc2626]">B: {ozet.toplamBorc.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</span>
+                                                    <span className="text-[11px] font-semibold text-[#059669]">A: {ozet.toplamAlacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</span>
+                                                </div>
+                                                <span className="text-[12px] font-semibold tabular-nums text-[#1d4ed8]">{Math.abs(ozet.netBakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {ozet.netBakiye > 0 ? '(B)' : ozet.netBakiye < 0 ? '(A)' : ''}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
 
-                                                return (
-                                                    <tr key={index} className={`${borc > 0 ? 'bg-red-50/30' : alacak > 0 ? 'bg-emerald-50/30' : ''}`}>
-                                                        <td>{new Date(h.tarih).toLocaleDateString('tr-TR')}</td>
-                                                        <td className="text-slate-500">{h.evrak_no || '-'}</td>
-                                                        <td className="font-bold">{h.islem_tipi}</td>
-                                                        <td className="truncate max-w-xs" title={h.aciklama}>{h.aciklama || '-'}</td>
-                                                        <td className="text-right font-bold text-[#dc2626] print:text-black">{borc > 0 ? borc.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : ''}</td>
-                                                        <td className="text-right font-bold text-[#059669] print:text-black">{alacak > 0 ? alacak.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : ''}</td>
-                                                        <td className="text-right font-semibold text-[#1d4ed8] print:text-black">{Math.abs(bakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {bakiye > 0 ? '(B)' : bakiye < 0 ? '(A)' : ''}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                            {/* TOPLAM SATIRI */}
-                                            <tr className="border-t-2 border-slate-400 text-[11px] font-semibold text-slate-800 print:border-black print:border-t-2" style={{ background: "#f8fafc" }}>
-                                                <td colSpan={4} className="p-2 text-right uppercase tracking-widest" style={{ borderRight: "1px solid var(--c-border)" }}>TOPLAM</td>
-                                                <td className="p-2 text-right text-[#dc2626] print:text-black" style={{ borderRight: "1px solid var(--c-border)" }}>{ozet.toplamBorc.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                                <td className="p-2 text-right text-[#059669] print:text-black" style={{ borderRight: "1px solid var(--c-border)" }}>{ozet.toplamAlacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                                <td className="p-2 text-right text-[#1d4ed8] print:text-black">{Math.abs(ozet.netBakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {ozet.netBakiye > 0 ? '(B)' : ozet.netBakiye < 0 ? '(A)' : ''}</td>
-                                            </tr>
-                                        </>
-                                    )}
-                                </tbody>
-                            </table>
+                            {/* MASAÜSTÜ TABLO GÖRÜNÜMÜ */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <table className="tbl-kurumsal whitespace-nowrap min-w-[700px]">
+                                    <thead>
+                                        <tr>
+                                            <th className="w-24">Tarih</th>
+                                            <th className="w-32">Evrak No</th>
+                                            <th className="w-36">İşlem Türü</th>
+                                            <th>Açıklama</th>
+                                            <th className="w-28 text-right">Borç (TL)</th>
+                                            <th className="w-28 text-right">Alacak (TL)</th>
+                                            <th className="w-32 text-right">Bakiye</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {yukleniyor ? (
+                                            <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Veriler Yükleniyor...</td></tr>
+                                        ) : filtrelenmisHareketler.length === 0 ? (
+                                            <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">{hareketler.length > 0 ? 'FİLTREYE UYGUN HAREKET BULUNAMADI' : 'HESAP HAREKETİ BULUNMUYOR'}</td></tr>
+                                        ) : (
+                                            <>
+                                                {filtrelenmisHareketler.map((h, index) => {
+                                                    const borc = Number(h.borc) || 0;
+                                                    const alacak = Number(h.alacak) || 0;
+                                                    const bakiye = bakiyeHaritasi[index] || 0;
+
+                                                    return (
+                                                        <tr key={index} className={`bg-white hover:bg-slate-50 ${borc > 0 ? 'border-l-2 border-[#dc2626]' : alacak > 0 ? 'border-l-2 border-[#059669]' : ''}`}>
+                                                            <td>{new Date(h.tarih).toLocaleDateString('tr-TR')}</td>
+                                                            <td className="text-slate-500">{h.evrak_no || '-'}</td>
+                                                            <td className="font-bold">{h.islem_tipi}</td>
+                                                            <td className="truncate max-w-xs" title={h.aciklama}>{h.aciklama || '-'}</td>
+                                                            <td className="text-right font-bold text-[#dc2626] print:text-black">{borc > 0 ? borc.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : ''}</td>
+                                                            <td className="text-right font-bold text-[#059669] print:text-black">{alacak > 0 ? alacak.toLocaleString('tr-TR', {minimumFractionDigits: 2}) : ''}</td>
+                                                            <td className="text-right font-semibold text-[#1d4ed8] print:text-black">{Math.abs(bakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {bakiye > 0 ? '(B)' : bakiye < 0 ? '(A)' : ''}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {/* TOPLAM SATIRI */}
+                                                <tr className="border-t-2 border-slate-400 text-[11px] font-semibold text-slate-800 print:border-black print:border-t-2" style={{ background: "#f8fafc" }}>
+                                                    <td colSpan={4} className="p-2 text-right uppercase tracking-widest" style={{ borderRight: "1px solid var(--c-border)" }}>TOPLAM</td>
+                                                    <td className="p-2 text-right text-[#dc2626] print:text-black" style={{ borderRight: "1px solid var(--c-border)" }}>{ozet.toplamBorc.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                                    <td className="p-2 text-right text-[#059669] print:text-black" style={{ borderRight: "1px solid var(--c-border)" }}>{ozet.toplamAlacak.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                                    <td className="p-2 text-right text-[#1d4ed8] print:text-black">{Math.abs(ozet.netBakiye).toLocaleString('tr-TR', {minimumFractionDigits: 2})} {ozet.netBakiye > 0 ? '(B)' : ozet.netBakiye < 0 ? '(A)' : ''}</td>
+                                                </tr>
+                                            </>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         {/* ALT BAR */}

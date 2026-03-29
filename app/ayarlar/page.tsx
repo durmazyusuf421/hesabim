@@ -4,6 +4,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import Link from "next/link";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 interface Personel {
     id: number;
     ad_soyad: string;
@@ -21,6 +22,7 @@ interface PersonelFormState {
 
 export default function AyarlarEkrani() {
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const { aktifSirket, kullaniciRol, isYonetici } = useAuth();
 
   const [yukleniyor, setYukleniyor] = useState(true);
@@ -110,7 +112,7 @@ export default function AyarlarEkrani() {
       if (duzenlemeModu && seciliPersonelId) {
           const updateData: Record<string, string> = { ad_soyad: personelForm.ad_soyad, eposta: personelForm.eposta, rol: kaydedilecekRolString };
           const { error } = await supabase.from("alt_kullanicilar").update(updateData).eq("id", seciliPersonelId);
-          if (error) toast.error("Güncelleme hatası!"); else toast.success("Personel bilgileri güncellendi.");
+          if (error) toast.error("Güncelleme hatası: " + error.message); else toast.success("Personel bilgileri güncellendi.");
       } else {
           // Önce Supabase Auth'da kullanıcı oluştur
           const authRes = await fetch("/api/create-user", {
@@ -119,7 +121,7 @@ export default function AyarlarEkrani() {
               body: JSON.stringify({ email: personelForm.eposta, password: personelForm.sifre }),
           });
           const authData = await authRes.json();
-          if (!authRes.ok) { toast.error("Auth hesabı oluşturulamadı: " + authData.error); return; }
+          if (!authRes.ok) { toast.error("Auth hesabı oluşturulamadı: " + (authData.error?.message || authData.error || "Bilinmeyen hata")); return; }
 
           // Sonra alt_kullanicilar tablosuna kaydet (şifre yazılmıyor)
           const { error } = await supabase.from("alt_kullanicilar").insert([{
@@ -133,19 +135,26 @@ export default function AyarlarEkrani() {
 
   const personelSil = async (id: number) => {
       if(!aktifSirket) return;
-      if(window.confirm("Bu personelin sisteme girişini kalıcı olarak iptal etmek istediğinize emin misiniz?")) {
-          // Önce auth_uid'yi al
-          const { data: personel } = await supabase.from("alt_kullanicilar").select("auth_uid").eq("id", id).single();
-          if (personel?.auth_uid) {
-              await fetch("/api/delete-user", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ auth_uid: personel.auth_uid }),
-              });
+      onayla({
+          baslik: "Personel Sil",
+          mesaj: "Bu personelin sisteme girişi iptal edilecek",
+          altMesaj: "Bu işlem geri alınamaz.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              // Önce auth_uid'yi al
+              const { data: personel } = await supabase.from("alt_kullanicilar").select("auth_uid").eq("id", id).single();
+              if (personel?.auth_uid) {
+                  await fetch("/api/delete-user", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ auth_uid: personel.auth_uid }),
+                  });
+              }
+              await supabase.from("alt_kullanicilar").delete().eq("id", id);
+              personelleriGetir(aktifSirket.id);
           }
-          await supabase.from("alt_kullanicilar").delete().eq("id", id);
-          personelleriGetir(aktifSirket.id);
-      }
+      });
   };
 
   if (!aktifSirket || yukleniyor) return <div className="h-full flex items-center justify-center font-semibold text-slate-500" style={{ background: "var(--c-bg)" }}>Sistem Doğrulanıyor...</div>;
@@ -399,6 +408,7 @@ export default function AyarlarEkrani() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

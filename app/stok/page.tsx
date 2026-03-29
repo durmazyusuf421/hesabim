@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
+import { useOnayModal } from "@/app/lib/useOnayModal";
 import Link from "next/link";
 interface Urun {
     id: number; urun_adi: string; barkod?: string; stok_miktari: number;
@@ -15,6 +16,7 @@ interface FormDataState {
 
 export default function StokKartlari() {
   const toast = useToast();
+  const { onayla, OnayModal } = useOnayModal();
   const { aktifSirket, kullaniciRol, isYonetici, isDepocu } = useAuth();
 
   const [urunler, setUrunler] = useState<Urun[]>([]);
@@ -82,18 +84,25 @@ export default function StokKartlari() {
       if (aktifSirket) verileriGetir(aktifSirket.id);
   };
 
-  const urunSil = async (id: number) => {
-      if(window.confirm("Bu ürünü kalıcı olarak silmek istediğinize emin misiniz?")) {
-          try {
-              const { error } = await supabase.from("urunler").delete().eq("id", id);
-              if (error) throw error;
-              toast.success("Ürün başarıyla silindi.");
-              if (aktifSirket) verileriGetir(aktifSirket.id);
-          } catch (error: unknown) {
-              const message = error instanceof Error ? error.message : String(error);
-              toast.error("Silme hatası: " + message);
+  const urunSil = (id: number) => {
+      onayla({
+          baslik: "Ürün Sil",
+          mesaj: "Bu ürünü kalıcı olarak silmek istediğinize emin misiniz?",
+          altMesaj: "Bu işlem geri alınamaz.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              try {
+                  const { error } = await supabase.from("urunler").delete().eq("id", id);
+                  if (error) throw error;
+                  toast.success("Ürün başarıyla silindi.");
+                  if (aktifSirket) verileriGetir(aktifSirket.id);
+              } catch (error: unknown) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  toast.error("Silme hatası: " + message);
+              }
           }
-      }
+      });
   };
 
   const filtrelenmisUrunler = urunler.filter(u => u.urun_adi.toLowerCase().includes(aramaTerimi.toLowerCase()) || (u.barkod && u.barkod.includes(aramaTerimi)));
@@ -111,59 +120,90 @@ export default function StokKartlari() {
             </div>
         ) : (
             <>
-                <div className="flex items-center justify-between px-4 py-2 shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                <div className="flex items-center justify-between px-4 py-2 shrink-0 flex-wrap gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
                     <div className="flex items-center gap-2">
                         <button onClick={yeniUrunEkle} className="btn-primary flex items-center gap-2"><i className="fas fa-plus text-[10px]" /> YENİ ÜRÜN</button>
                         <Link href="/stok/toplu-fiyat" className="btn-secondary flex items-center gap-2"><i className="fas fa-tags text-[10px]" /> TOPLU FİYAT</Link>
                     </div>
-                    <div className="relative">
-                        <input type="text" placeholder="Ürün adı veya barkod ara..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-64" />
+                    <div className="relative w-full sm:w-auto">
+                        <input type="text" placeholder="Ürün adı veya barkod ara..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-full sm:w-64" />
                         <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] text-[10px]" />
                     </div>
                 </div>
 
                 <div className="flex-1 overflow-auto relative" style={{ background: "var(--c-bg)" }}>
-                    <table className="tbl-kurumsal">
-                        <thead>
-                            <tr>
-                                <th className="w-16 text-center">ID</th>
-                                <th className="w-32 text-center">Barkod</th>
-                                <th>Ürün Adı</th>
-                                <th className="w-24 text-center">Mevcut Stok</th>
-                                <th className="w-20 text-center">Birim</th>
-                                <th className="w-28 text-right">Alış Fiyatı</th>
-                                <th className="w-28 text-right">Satış Fiyatı</th>
-                                <th className="w-20 text-center">KDV (%)</th>
-                                <th className="w-24 text-center print:hidden">İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {yukleniyor ? (
-                                <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
-                            ) : filtrelenmisUrunler.length === 0 ? (
-                                <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Stok Kartı Bulunamadı</td></tr>
-                            ) : (
-                                filtrelenmisUrunler.map((u) => (
-                                    <tr key={u.id} className="text-[11px] font-medium border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                                        <td className="p-1.5 border-r border-slate-200 text-center text-slate-400">#{u.id}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-center font-bold font-mono text-slate-600">{u.barkod || '-'}</td>
-                                        <td className="p-1.5 border-r border-slate-200 font-bold text-slate-800">{u.urun_adi}</td>
-                                        <td className={`p-1.5 border-r border-slate-200 text-center font-semibold text-sm ${Number(u.stok_miktari) <= 0 ? 'text-[#dc2626]' : 'text-[#059669]'}`}>{u.stok_miktari}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-center">{u.birim}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-slate-500">{Number(u.alis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-[#1d4ed8]">{Number(u.satis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-center text-slate-500">% {u.kdv_orani}</td>
-                                        <td className="p-1.5 border-r border-slate-200 text-center print:hidden">
-                                            <div className="flex justify-center space-x-1">
-                                                <button onClick={() => urunDuzenle(u)} className="btn-secondary px-2 py-1" title="Düzenle"><i className="fas fa-edit"></i></button>
-                                                <button onClick={() => urunSil(u.id)} className="btn-secondary px-2 py-1" title="Sil"><i className="fas fa-trash"></i></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                    {/* MOBİL KART GÖRÜNÜMÜ */}
+                    <div className="md:hidden space-y-2 p-3">
+                        {yukleniyor ? (
+                            <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</div>
+                        ) : filtrelenmisUrunler.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Stok Kartı Bulunamadı</div>
+                        ) : (
+                            filtrelenmisUrunler.map((u) => (
+                                <div key={u.id} className="bg-white border border-slate-200 p-3 hover:bg-slate-50">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="text-[12px] font-semibold text-[#0f172a]">{u.urun_adi}</span>
+                                        <span className={`text-[12px] font-semibold tabular-nums ${Number(u.stok_miktari) <= 0 ? 'text-[#dc2626]' : 'text-[#059669]'}`}>{u.stok_miktari} {u.birim}</span>
+                                    </div>
+                                    <div className="text-[11px] text-[#64748b]">{u.barkod ? `Barkod: ${u.barkod}` : 'Barkod yok'} | KDV: %{u.kdv_orani}</div>
+                                    <div className="flex justify-between items-center mt-2">
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => urunDuzenle(u)} className="btn-secondary px-2 py-1 text-[10px]" title="Düzenle"><i className="fas fa-edit"></i></button>
+                                            <button onClick={() => urunSil(u.id)} className="btn-secondary px-2 py-1 text-[10px]" title="Sil"><i className="fas fa-trash"></i></button>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-[11px] text-[#94a3b8] mr-2">Alış: {Number(u.alis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</span>
+                                            <span className="text-[12px] font-semibold tabular-nums text-[#1d4ed8]">{Number(u.satis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                    {/* MASAÜSTÜ TABLO GÖRÜNÜMÜ */}
+                    <div className="hidden md:block overflow-x-auto">
+                        <table className="tbl-kurumsal">
+                            <thead>
+                                <tr>
+                                    <th className="w-16 text-center">ID</th>
+                                    <th className="w-32 text-center">Barkod</th>
+                                    <th>Ürün Adı</th>
+                                    <th className="w-24 text-center">Mevcut Stok</th>
+                                    <th className="w-20 text-center">Birim</th>
+                                    <th className="w-28 text-right">Alış Fiyatı</th>
+                                    <th className="w-28 text-right">Satış Fiyatı</th>
+                                    <th className="w-20 text-center">KDV (%)</th>
+                                    <th className="w-24 text-center print:hidden">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {yukleniyor ? (
+                                    <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                                ) : filtrelenmisUrunler.length === 0 ? (
+                                    <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Stok Kartı Bulunamadı</td></tr>
+                                ) : (
+                                    filtrelenmisUrunler.map((u) => (
+                                        <tr key={u.id} className="text-[11px] font-medium border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                                            <td className="p-1.5 border-r border-slate-200 text-center text-slate-400">#{u.id}</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-center font-bold font-mono text-slate-600">{u.barkod || '-'}</td>
+                                            <td className="p-1.5 border-r border-slate-200 font-bold text-slate-800">{u.urun_adi}</td>
+                                            <td className={`p-1.5 border-r border-slate-200 text-center font-semibold text-sm ${Number(u.stok_miktari) <= 0 ? 'text-[#dc2626]' : 'text-[#059669]'}`}>{u.stok_miktari}</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-center">{u.birim}</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-slate-500">{Number(u.alis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-[#1d4ed8]">{Number(u.satis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-center text-slate-500">% {u.kdv_orani}</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-center print:hidden">
+                                                <div className="flex justify-center space-x-1">
+                                                    <button onClick={() => urunDuzenle(u)} className="btn-secondary px-2 py-1" title="Düzenle"><i className="fas fa-edit"></i></button>
+                                                    <button onClick={() => urunSil(u.id)} className="btn-secondary px-2 py-1" title="Sil"><i className="fas fa-trash"></i></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </>
         )}
@@ -249,6 +289,7 @@ export default function StokKartlari() {
           </div>
         </div>
       )}
+      <OnayModal />
     </>
   );
 }

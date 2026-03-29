@@ -85,7 +85,7 @@ export default function AnaSayfa() {
 
     return (
         <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
-            <div className="metric-bar shrink-0">
+            <div className="metric-bar shrink-0 flex-wrap">
                 <div className="metric-block">
                     <div className="metric-label">Bugünkü Sipariş</div>
                     <div className="metric-value">{bugunkuSiparisler.length}</div>
@@ -134,7 +134,7 @@ export default function AnaSayfa() {
                             <div className="w-3 h-3" style={{ background: "#1e293b" }} /> Ciro (TL)
                         </div>
                     </div>
-                    <div className="p-4 md:p-5" style={{ height: 280 }}>
+                    <div className="p-4 md:p-5" style={{ minHeight: 220, height: 280 }}>
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={aylikGrafik} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -153,7 +153,8 @@ export default function AnaSayfa() {
                             <div className="text-[13px] font-semibold text-[#0f172a]">Son Siparişler</div>
                             <Link href="/" className="text-[10px] font-semibold text-[#3b82f6] hover:text-[#1d4ed8] tracking-wide uppercase">Tümünü Gör <i className="fas fa-arrow-right ml-1 text-[8px]" /></Link>
                         </div>
-                        <div className="overflow-x-auto">
+                        {/* Desktop Table */}
+                        <div className="hidden md:block overflow-x-auto">
                             <table className="tbl-kurumsal">
                                 <thead><tr><th>Fiş No</th><th>Müşteri / Ünvan</th><th className="text-right">Tutar (TL)</th><th className="text-center">Durum</th><th className="text-center">Tarih</th></tr></thead>
                                 <tbody>
@@ -172,6 +173,26 @@ export default function AnaSayfa() {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-2 p-3">
+                            {sonBesSiparis.length === 0 ? (
+                                <div className="p-6 text-center text-[#94a3b8] text-[11px] font-medium tracking-widest uppercase">Sipariş bulunamadı</div>
+                            ) : (
+                                sonBesSiparis.map(s => (
+                                    <div key={s.id} className="p-3 border border-[#e2e8f0] space-y-1.5" style={{ background: "#f8fafc" }}>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[12px] font-semibold text-[#1d4ed8]">{s.siparis_no || `#${s.id}`}</span>
+                                            <span className={durumBadge(s.durum)}>{s.durum}</span>
+                                        </div>
+                                        <div className="text-[12px] font-semibold text-[#0f172a]">{s.musteriAdi}</div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] text-[#94a3b8]">{s.created_at ? new Date(s.created_at).toLocaleDateString("tr-TR") : "-"}</span>
+                                            <span className="text-[13px] font-semibold text-[#0f172a]" style={{ fontVariantNumeric: "tabular-nums" }}>{fmtTL(parseTutar(s.toplam_tutar))} TL</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
 
