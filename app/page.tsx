@@ -12,11 +12,13 @@ interface Siparis {
     toplam_tutar: number;
     tarih: string;
     created_at: string;
+    red_sebebi?: string;
 }
 interface Firma { id: number; unvan: string; }
 interface Urun { id: number; urun_adi: string; satis_fiyati: number | string; birim: string; barkod?: string; }
 interface YeniKalem { urun_adi: string; miktar: number; birim: string; birim_fiyat: number; }
 interface DetayKalem { id: number; urun_adi: string; miktar: number; birim_fiyat: number; }
+interface DuzenleKalem { id: number; urun_adi: string; miktar: number; birim_fiyat: number; }
 
 const parseTutar = (val: string | number | null | undefined): number => {
     if (!val) return 0;
@@ -43,8 +45,6 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     const [detaySiparis, setDetaySiparis] = useState<Siparis | null>(null);
     const [detayKalemler, setDetayKalemler] = useState<DetayKalem[]>([]);
     const [detayYukleniyor, setDetayYukleniyor] = useState(false);
-    const [islemMenuAcik, setIslemMenuAcik] = useState(false);
-    const [satirDurumMenuId, setSatirDurumMenuId] = useState<number | null>(null);
 
     // --- YENİ SİPARİŞ MODAL STATELERİ ---
     const [yeniModalAcik, setYeniModalAcik] = useState(false);
@@ -55,6 +55,12 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     const [kaydediliyor, setKaydediliyor] = useState(false);
     const [yazdirilacakFis, setYazdirilacakFis] = useState<{siparis: Siparis; kalemler: DetayKalem[]} | null>(null);
     const [yazdirilacakIrsaliye, setYazdirilacakIrsaliye] = useState<{siparis: Siparis; kalemler: DetayKalem[]} | null>(null);
+
+    // --- DÜZENLE VE ONAYLA STATELERİ ---
+    const [duzenleModuAcik, setDuzenleModuAcik] = useState(false);
+    const [duzenleKalemler, setDuzenleKalemler] = useState<DuzenleKalem[]>([]);
+    const [toptanciNotu, setToptanciNotu] = useState("");
+    const [onayGonderiliyor, setOnayGonderiliyor] = useState(false);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);
@@ -268,8 +274,6 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
 
         toast.success(`Sipariş durumu "${yeniDurum}" olarak güncellendi.`);
         setSiparisler(prev => prev.map(s => s.id === hedefId ? { ...s, durum: yeniDurum } : s));
-        setIslemMenuAcik(false);
-        setSatirDurumMenuId(null);
     };
 
     const fisYazdir = async (siparis: Siparis) => {
@@ -302,6 +306,50 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
         });
     };
 
+    // --- DÜZENLE VE ONAYLA FONKSİYONLARI ---
+    const duzenleModuBaslat = () => {
+        setDuzenleKalemler(detayKalemler.map(k => ({ ...k })));
+        setToptanciNotu("");
+        setDuzenleModuAcik(true);
+    };
+
+    const duzenleKalemGuncelle = (index: number, alan: "miktar" | "birim_fiyat", deger: number) => {
+        setDuzenleKalemler(prev => prev.map((k, i) => i === index ? { ...k, [alan]: deger } : k));
+    };
+
+    const onayaGonder = async () => {
+        if (!aktifSirket || !detaySiparis) return;
+        setOnayGonderiliyor(true);
+        try {
+            // siparis_kalemleri güncelle
+            for (const kalem of duzenleKalemler) {
+                await supabase.from("siparis_kalemleri").update({
+                    miktar: kalem.miktar,
+                    birim_fiyat: kalem.birim_fiyat
+                }).eq("id", kalem.id);
+            }
+
+            // toplam_tutar hesapla
+            const yeniToplam = duzenleKalemler.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
+
+            // siparisi güncelle
+            await supabase.from("siparisler").update({
+                toptanci_onay: "ONAYLANDI",
+                durum: "MARKET_ONAYI_BEKLENIYOR",
+                toplam_tutar: yeniToplam,
+                toptanci_notu: toptanciNotu || null
+            }).eq("id", detaySiparis.id);
+
+            toast.success("Sipariş düzenlendi ve market onayına gönderildi!");
+            setDuzenleModuAcik(false);
+            setDetayModalAcik(false);
+            setSiparisler(prev => prev.map(s => s.id === detaySiparis.id ? { ...s, durum: "MARKET_ONAYI_BEKLENIYOR", toplam_tutar: yeniToplam } : s));
+        } catch (error) {
+            toast.error("Onaya gönderilirken hata: " + (error instanceof Error ? error.message : String(error)));
+        }
+        setOnayGonderiliyor(false);
+    };
+
     const filtrelenmisSiparisler = siparisler.filter(s =>
         (s.siparis_no || "").toLowerCase().includes(aramaTerimi.toLowerCase()) ||
         (s.cari_adi || "").toLowerCase().includes(aramaTerimi.toLowerCase())
@@ -309,15 +357,16 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
 
     if (!aktifSirket) return <div className="h-full flex items-center justify-center font-bold text-slate-500" style={{ background: "var(--c-bg)" }}>Sistem Doğrulanıyor...</div>;
 
-    const getDurumBadge = (durum: string) => {
+    const getDurumBilgi = (durum: string): { cls: string; metin: string } => {
         switch (durum) {
-            case "YENI": return "badge-durum badge-bekliyor";
-            case "HAZIRLANIYOR": return "badge-durum badge-hazirlaniyor";
-            case "TAMAMLANDI": return "badge-durum badge-teslim";
-            case "IPTAL": return "badge-durum badge-iptal";
-            case "Onay Bekliyor": return "badge-durum badge-bekliyor";
-            case "Onaylandı": return "badge-durum badge-teslim";
-            default: return "badge-durum badge-bekliyor";
+            case "YENI": return { cls: "badge-durum badge-bekliyor", metin: "Yeni" };
+            case "HAZIRLANIYOR": return { cls: "badge-durum badge-hazirlaniyor", metin: "Hazırlanıyor" };
+            case "TAMAMLANDI": return { cls: "badge-durum badge-teslim", metin: "Tamamlandı" };
+            case "IPTAL": return { cls: "badge-durum badge-iptal", metin: "Reddedildi" };
+            case "Onay Bekliyor": return { cls: "badge-durum badge-bekliyor", metin: "Onay Bekliyor" };
+            case "Onaylandı": return { cls: "badge-durum badge-teslim", metin: "Onaylandı" };
+            case "MARKET_ONAYI_BEKLENIYOR": return { cls: "badge-durum badge-hazirlaniyor", metin: "Market Onayı Bekliyor" };
+            default: return { cls: "badge-durum badge-bekliyor", metin: durum };
         }
     };
 
@@ -344,27 +393,9 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                             <button onClick={siparisSil} className="btn-secondary whitespace-nowrap text-[#dc2626]">
                                 <i className="fas fa-trash-alt mr-2"></i> Sil
                             </button>
-                            <div className="relative" style={{ zIndex: islemMenuAcik ? 9999 : 'auto' }}>
-                                <button onClick={() => { if (!seciliSiparisId) { toast.error("Lütfen işlem yapılacak siparişi seçin."); return; } setIslemMenuAcik(!islemMenuAcik); }} className="btn-primary whitespace-nowrap">
-                                    <i className="fas fa-check-circle mr-2"></i> İşlem <i className="fas fa-caret-down ml-2"></i>
-                                </button>
-                                {islemMenuAcik && seciliSiparisId && (
-                                    <>
-                                        <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setIslemMenuAcik(false)}></div>
-                                        <div className="absolute top-full left-0 mt-1 bg-white border w-56 overflow-hidden" style={{ zIndex: 9999, borderColor: "var(--c-border)" }}>
-                                            <button onClick={() => durumGuncelle("HAZIRLANIYOR")} className="w-full text-left px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center border-b" style={{ borderColor: "var(--c-border)" }}>
-                                                <i className="fas fa-cog w-5 text-blue-500"></i> Siparişi Onayla (Hazırla)
-                                            </button>
-                                            <button onClick={() => durumGuncelle("TAMAMLANDI")} className="w-full text-left px-4 py-2.5 text-xs font-bold text-[#059669] hover:bg-emerald-50 flex items-center border-b" style={{ borderColor: "var(--c-border)" }}>
-                                                <i className="fas fa-check-circle w-5 text-[#059669]"></i> Siparişi Tamamla
-                                            </button>
-                                            <button onClick={() => durumGuncelle("IPTAL")} className="w-full text-left px-4 py-2.5 text-xs font-bold text-[#dc2626] hover:bg-red-50 flex items-center">
-                                                <i className="fas fa-times-circle w-5 text-[#dc2626]"></i> Siparişi İptal Et
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            <button onClick={() => { if (!seciliSiparisId) { toast.error("Lütfen işlem yapılacak siparişi seçin."); return; } durumGuncelle("IPTAL"); }} className="btn-secondary whitespace-nowrap text-amber-600">
+                                <i className="fas fa-times-circle mr-2"></i> İptal Et
+                            </button>
                             <button onClick={() => window.print()} className="btn-secondary whitespace-nowrap">
                                 <i className="fas fa-print mr-2"></i> Yazdır
                             </button>
@@ -389,7 +420,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                 className={`bg-white border p-3 cursor-pointer ${isSelected ? 'border-blue-500 bg-blue-50 border-l-4' : 'border-slate-200 hover:bg-slate-50'}`}>
                                                 <div className="flex justify-between items-start mb-2">
                                                     <span className="text-[12px] font-semibold text-[#1d4ed8]">{s.siparis_no || '#' + s.id}</span>
-                                                    <span className={getDurumBadge(s.durum)}>{s.durum}</span>
+                                                    <span className={getDurumBilgi(s.durum).cls}>{getDurumBilgi(s.durum).metin}</span>
                                                 </div>
                                                 <div className="text-[12px] font-semibold text-[#0f172a] mb-1">{s.cari_adi}</div>
                                                 <div className="flex justify-between items-center">
@@ -425,7 +456,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                     ) : (
                                         filtrelenmisSiparisler.map((s) => {
                                             const isSelected = seciliSiparisId === s.id;
-                                            const badge = getDurumBadge(s.durum);
+                                            const durumBilgi = getDurumBilgi(s.durum);
                                             return (
                                                 <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={() => detayAc(s)} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 text-slate-800' : 'bg-white hover:bg-slate-50'}`}>
                                                     <td className="text-center">
@@ -434,7 +465,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                     <td className="font-bold text-slate-600">{s.siparis_no}</td>
                                                     <td className="font-bold text-slate-800">{s.cari_adi}</td>
                                                     <td className="text-center">
-                                                        <span className={badge}>{s.durum}</span>
+                                                        <span className={durumBilgi.cls}>{durumBilgi.metin}</span>
                                                     </td>
                                                     <td className="text-right font-semibold text-slate-800">
                                                         {parseTutar(s.toplam_tutar).toLocaleString('tr-TR', {minimumFractionDigits: 2})}
@@ -447,27 +478,9 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                             <button onClick={(e) => { e.stopPropagation(); detayAc(s); }} className="w-6 h-6 bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors" title="Detay Göster">
                                                                 <i className="fas fa-eye text-[9px]"></i>
                                                             </button>
-                                                            <div className="relative">
-                                                                <button onClick={(e) => { e.stopPropagation(); setSatirDurumMenuId(satirDurumMenuId === s.id ? null : s.id); }} className="w-6 h-6 bg-emerald-50 border border-emerald-200 text-[#059669] hover:bg-emerald-100 flex items-center justify-center transition-colors" title="Durum Değiştir">
-                                                                    <i className="fas fa-exchange-alt text-[9px]"></i>
-                                                                </button>
-                                                                {satirDurumMenuId === s.id && (
-                                                                    <>
-                                                                        <div className="fixed inset-0 z-[60]" onClick={() => setSatirDurumMenuId(null)}></div>
-                                                                        <div className="absolute right-0 top-full mt-1 bg-white border z-[70] w-52 overflow-hidden" style={{ borderColor: "var(--c-border)" }}>
-                                                                            <button onClick={(e) => { e.stopPropagation(); durumGuncelle("HAZIRLANIYOR", s.id); }} className="w-full text-left px-3 py-2 text-[11px] font-bold text-blue-700 hover:bg-blue-50 flex items-center border-b" style={{ borderColor: "var(--c-border)" }}>
-                                                                                <i className="fas fa-cog w-5 text-blue-500 text-[10px]"></i> Onayla (Hazırla)
-                                                                            </button>
-                                                                            <button onClick={(e) => { e.stopPropagation(); durumGuncelle("TAMAMLANDI", s.id); }} className="w-full text-left px-3 py-2 text-[11px] font-bold text-[#059669] hover:bg-emerald-50 flex items-center border-b" style={{ borderColor: "var(--c-border)" }}>
-                                                                                <i className="fas fa-check-circle w-5 text-[#059669] text-[10px]"></i> Tamamla
-                                                                            </button>
-                                                                            <button onClick={(e) => { e.stopPropagation(); durumGuncelle("IPTAL", s.id); }} className="w-full text-left px-3 py-2 text-[11px] font-bold text-[#dc2626] hover:bg-red-50 flex items-center">
-                                                                                <i className="fas fa-times-circle w-5 text-[#dc2626] text-[10px]"></i> İptal Et
-                                                                            </button>
-                                                                        </div>
-                                                                    </>
-                                                                )}
-                                                            </div>
+                                                            <button onClick={(e) => { e.stopPropagation(); durumGuncelle("IPTAL", s.id); }} className="w-6 h-6 bg-red-50 border border-red-200 text-[#dc2626] hover:bg-red-100 flex items-center justify-center transition-colors" title="İptal Et">
+                                                                <i className="fas fa-times text-[9px]"></i>
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -600,10 +613,15 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                 </h3>
                                 <p className="text-[10px] text-slate-500 font-bold mt-0.5">
                                     Müşteri: {detaySiparis.cari_adi} | Tarih: {detaySiparis.created_at ? new Date(detaySiparis.created_at).toLocaleDateString('tr-TR') : '-'} |{" "}
-                                    <span className={getDurumBadge(detaySiparis.durum)}>{detaySiparis.durum}</span>
+                                    <span className={getDurumBilgi(detaySiparis.durum).cls}>{getDurumBilgi(detaySiparis.durum).metin}</span>
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
+                                {(detaySiparis.durum === "Onay Bekliyor" || detaySiparis.durum === "YENI") && !duzenleModuAcik && (
+                                    <button onClick={duzenleModuBaslat} className="btn-primary" style={{ background: "#059669" }}>
+                                        <i className="fas fa-edit mr-1.5"></i> Düzenle ve Onayla
+                                    </button>
+                                )}
                                 <button onClick={() => fisYazdir(detaySiparis)} className="btn-primary">
                                     <i className="fas fa-receipt mr-1.5"></i> Fiş Yazdır
                                 </button>
@@ -612,47 +630,113 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                         <i className="fas fa-truck mr-1.5"></i> İrsaliye Yazdır
                                     </button>
                                 )}
-                                <button onClick={() => setDetayModalAcik(false)} className="text-slate-500 hover:text-[#dc2626] px-2"><i className="fas fa-times text-lg"></i></button>
+                                <button onClick={() => { setDetayModalAcik(false); setDuzenleModuAcik(false); }} className="text-slate-500 hover:text-[#dc2626] px-2"><i className="fas fa-times text-lg"></i></button>
                             </div>
                         </div>
 
+                        {/* RED SEBEBİ UYARISI */}
+                        {detaySiparis.durum === "IPTAL" && detaySiparis.red_sebebi && (
+                            <div className="mx-4 mt-3 p-3 bg-red-50" style={{ border: "1px solid #fca5a5" }}>
+                                <div className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1"><i className="fas fa-times-circle mr-1"></i> Market Red Sebebi:</div>
+                                <div className="text-[12px] font-semibold text-red-800">{detaySiparis.red_sebebi}</div>
+                            </div>
+                        )}
+
                         <div className="flex-1 overflow-auto bg-white">
-                            <table className="tbl-kurumsal">
-                                <thead>
-                                    <tr>
-                                        <th className="w-8 text-center">#</th>
-                                        <th>Ürün Adı</th>
-                                        <th className="w-24 text-center">Miktar</th>
-                                        <th className="w-32 text-right">Birim Fiyat</th>
-                                        <th className="w-32 text-right">Tutar (TL)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {detayYukleniyor ? (
-                                        <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-bold"><i className="fas fa-circle-notch fa-spin mr-2"></i> Kalemler yükleniyor...</td></tr>
-                                    ) : detayKalemler.length === 0 ? (
-                                        <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-bold uppercase tracking-widest">Bu siparişe ait kalem bulunamadı</td></tr>
-                                    ) : (
-                                        detayKalemler.map((k, i) => (
-                                            <tr key={k.id} className="hover:bg-slate-50">
-                                                <td className="text-center text-slate-500 font-bold">{i + 1}</td>
-                                                <td className="font-bold text-slate-800">{k.urun_adi}</td>
-                                                <td className="text-center font-bold">{k.miktar}</td>
-                                                <td className="text-right">{parseTutar(k.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
-                                                <td className="text-right font-bold text-[#1d4ed8]">{(k.miktar * parseTutar(k.birim_fiyat)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                            {duzenleModuAcik ? (
+                                <>
+                                    <div className="px-4 py-2 bg-emerald-50 text-[11px] font-semibold text-emerald-700 flex items-center gap-2" style={{ borderBottom: "1px solid #d1fae5" }}>
+                                        <i className="fas fa-edit"></i> Düzenleme Modu — Miktar ve fiyatları güncelleyip onaya gönderin
+                                    </div>
+                                    <table className="tbl-kurumsal">
+                                        <thead>
+                                            <tr>
+                                                <th className="w-8 text-center">#</th>
+                                                <th>Ürün Adı</th>
+                                                <th className="w-28 text-center">Miktar</th>
+                                                <th className="w-36 text-right">Birim Fiyat (TL)</th>
+                                                <th className="w-32 text-right">Tutar (TL)</th>
                                             </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+                                        </thead>
+                                        <tbody>
+                                            {duzenleKalemler.map((k, i) => (
+                                                <tr key={k.id} className="hover:bg-slate-50">
+                                                    <td className="text-center text-slate-500 font-bold">{i + 1}</td>
+                                                    <td className="font-bold text-slate-800">{k.urun_adi}</td>
+                                                    <td className="p-0">
+                                                        <input type="number" min={0} value={k.miktar} onChange={(e) => duzenleKalemGuncelle(i, "miktar", Number(e.target.value))} className="w-full h-full px-2 py-1 text-center font-semibold outline-none bg-transparent focus:bg-white focus:ring-1 focus:ring-emerald-400 input-kurumsal" />
+                                                    </td>
+                                                    <td className="p-0">
+                                                        <input type="number" min={0} step={0.01} value={k.birim_fiyat} onChange={(e) => duzenleKalemGuncelle(i, "birim_fiyat", Number(e.target.value))} className="w-full h-full px-2 py-1 text-right font-semibold outline-none bg-transparent focus:bg-white focus:ring-1 focus:ring-emerald-400 input-kurumsal" />
+                                                    </td>
+                                                    <td className="text-right font-bold text-[#059669]">{(k.miktar * k.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    <div className="px-4 py-3">
+                                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Toptancı Notu (Opsiyonel)</label>
+                                        <textarea value={toptanciNotu} onChange={(e) => setToptanciNotu(e.target.value)} placeholder="Markete iletmek istediğiniz not..." className="input-kurumsal w-full" rows={2} />
+                                    </div>
+                                </>
+                            ) : (
+                                <table className="tbl-kurumsal">
+                                    <thead>
+                                        <tr>
+                                            <th className="w-8 text-center">#</th>
+                                            <th>Ürün Adı</th>
+                                            <th className="w-24 text-center">Miktar</th>
+                                            <th className="w-32 text-right">Birim Fiyat</th>
+                                            <th className="w-32 text-right">Tutar (TL)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {detayYukleniyor ? (
+                                            <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-bold"><i className="fas fa-circle-notch fa-spin mr-2"></i> Kalemler yükleniyor...</td></tr>
+                                        ) : detayKalemler.length === 0 ? (
+                                            <tr><td colSpan={5} className="p-6 text-center text-slate-400 font-bold uppercase tracking-widest">Bu siparişe ait kalem bulunamadı</td></tr>
+                                        ) : (
+                                            detayKalemler.map((k, i) => (
+                                                <tr key={k.id} className="hover:bg-slate-50">
+                                                    <td className="text-center text-slate-500 font-bold">{i + 1}</td>
+                                                    <td className="font-bold text-slate-800">{k.urun_adi}</td>
+                                                    <td className="text-center font-bold">{k.miktar}</td>
+                                                    <td className="text-right">{parseTutar(k.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                                                    <td className="text-right font-bold text-[#1d4ed8]">{(k.miktar * parseTutar(k.birim_fiyat)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            )}
                         </div>
 
                         <div className="bg-[#f8fafc] p-3 flex justify-between items-center shrink-0" style={{ borderTop: "1px solid var(--c-border)" }}>
-                            <span className="text-xs font-bold text-slate-600">{detayKalemler.length} kalem</span>
-                            <div className="bg-white border px-4 py-2" style={{ borderColor: "var(--c-border)" }}>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase mr-3">Genel Toplam</span>
-                                <span className="text-lg font-semibold text-[#1d4ed8]">{parseTutar(detaySiparis.toplam_tutar).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
-                            </div>
+                            {duzenleModuAcik ? (
+                                <>
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setDuzenleModuAcik(false)} className="btn-secondary"><i className="fas fa-times text-[#dc2626] mr-1.5"></i> Vazgeç</button>
+                                        <span className="text-xs font-bold text-slate-600">{duzenleKalemler.length} kalem</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-white border px-4 py-2" style={{ borderColor: "var(--c-border)" }}>
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase mr-3">Yeni Toplam</span>
+                                            <span className="text-lg font-semibold text-[#059669]">{duzenleKalemler.reduce((a, k) => a + k.miktar * k.birim_fiyat, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
+                                        </div>
+                                        <button onClick={onayaGonder} disabled={onayGonderiliyor} className="btn-primary disabled:opacity-50" style={{ background: "#059669" }}>
+                                            <i className="fas fa-paper-plane mr-1.5"></i> {onayGonderiliyor ? "Gönderiliyor..." : "Onaya Gönder"}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-xs font-bold text-slate-600">{detayKalemler.length} kalem</span>
+                                    <div className="bg-white border px-4 py-2" style={{ borderColor: "var(--c-border)" }}>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase mr-3">Genel Toplam</span>
+                                        <span className="text-lg font-semibold text-[#1d4ed8]">{parseTutar(detaySiparis.toplam_tutar).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -197,7 +197,17 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
     const [il, setIl] = useState("");
     const [ilce, setIlce] = useState("");
     const [adres, setAdres] = useState("");
-    const [sektor, setSektor] = useState("");
+    const [seciliSektorler, setSeciliSektorler] = useState<string[]>([]);
+
+    const SEKTOR_LISTESI = [
+        "Sebze & Meyve", "Et & Tavuk", "Süt & Süt Ürünleri", "Bakliyat & Kuruyemiş",
+        "Ekmek & Unlu Mamüller", "İçecek", "Temizlik & Deterjan", "Elektronik",
+        "Tekstil & Giyim", "İnşaat & Yapı Malzemesi", "Kozmetik & Kişisel Bakım", "Diğer"
+    ];
+
+    const sektorToggle = (s: string) => {
+        setSeciliSektorler(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
+    };
 
     const renkler = {
         cyan: {
@@ -220,6 +230,11 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
             // === KAYIT İŞLEMİ (Supabase Auth + Şirket Kaydı) ===
             if (!eposta || !isletmeAdi || !unvan || !telefon || !sifre || !vergiNo || !vergiDairesi || !il || !adres) {
                 toast.error("Lütfen E-Fatura için gerekli tüm zorunlu alanları doldurun!");
+                setYukleniyor(false);
+                return;
+            }
+            if (seciliSektorler.length === 0) {
+                toast.error("Lütfen en az bir sektör seçiniz!");
                 setYukleniyor(false);
                 return;
             }
@@ -246,7 +261,7 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                 eposta: eposta.toLowerCase(),
                 isletme_adi: isletmeAdi, unvan, telefon, rol,
                 vergi_no: vergiNo, vergi_dairesi: vergiDairesi, il, ilce, adres,
-                sektor: sektor || "Diğer"
+                sektor: seciliSektorler.join(", ")
             };
 
             const { data, error } = await supabase.from("sirketler").insert([yeniSirket]).select().single();
@@ -446,21 +461,24 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">İletişim Telefonu <span className="text-red-500">*</span></label>
                                     <input type="tel" value={telefon} onChange={(e) => setTelefon(e.target.value)} placeholder="05XX XXX XX XX" className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`} />
                                 </div>
-                                <div>
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Sektör</label>
-                                    <select value={sektor} onChange={(e) => setSektor(e.target.value)} className={`w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm text-slate-800 outline-none transition-all ${renkler.borderFocus} focus:bg-white`}>
-                                        <option value="">-- Sektör Seçiniz --</option>
-                                        <option value="Gıda">Gıda &amp; İçecek</option>
-                                        <option value="Tekstil">Tekstil &amp; Konfeksiyon</option>
-                                        <option value="Elektronik">Elektronik &amp; Teknoloji</option>
-                                        <option value="Kozmetik">Kozmetik &amp; Kişisel Bakım</option>
-                                        <option value="Kırtasiye">Kırtasiye &amp; Ofis</option>
-                                        <option value="İnşaat">İnşaat Malzemeleri</option>
-                                        <option value="Oto Yedek Parça">Oto Yedek Parça</option>
-                                        <option value="Mobilya">Mobilya &amp; Dekorasyon</option>
-                                        <option value="Tarım">Tarım &amp; Hayvancılık</option>
-                                        <option value="Diğer">Diğer</option>
-                                    </select>
+                                <div className="md:col-span-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 pl-1">Faaliyet Sektörü <span className="text-red-500">*</span> <span className="text-slate-300 normal-case">(birden fazla seçilebilir)</span></label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {SEKTOR_LISTESI.map(s => {
+                                            const secili = seciliSektorler.includes(s);
+                                            return (
+                                                <button
+                                                    key={s}
+                                                    type="button"
+                                                    onClick={() => sektorToggle(s)}
+                                                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-[11px] font-bold ${secili ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-slate-50 border-slate-100 text-slate-500 hover:border-slate-300'}`}
+                                                >
+                                                    <i className={`fas ${secili ? 'fa-check-square text-blue-500' : 'fa-square text-slate-300'} text-[13px]`}></i>
+                                                    {s}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Sisteme Giriş Şifresi <span className="text-red-500">*</span></label>

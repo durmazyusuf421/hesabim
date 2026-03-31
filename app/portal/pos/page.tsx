@@ -210,11 +210,11 @@ export default function PosEkrani() {
   return (
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
-        <div className="flex-1 flex flex-col lg:flex-row gap-4 p-2 lg:p-4 overflow-auto lg:overflow-hidden select-none">
+        <div className="flex-1 flex flex-col md:flex-row gap-4 p-2 md:p-4 overflow-auto md:overflow-hidden select-none">
 
           {/* SÜTUN 1: SEPET (SATIŞ FİŞİ) - MODERN & OKUNAKLI */}
-          <div className="w-full lg:w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
-              <div className="bg-slate-50 border-b border-slate-200 p-3 lg:p-4 flex flex-wrap justify-between items-center gap-2 z-10 shrink-0">
+          <div className="w-full md:w-[42%] bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+              <div className="bg-slate-50 border-b border-slate-200 p-3 md:p-4 flex flex-wrap justify-between items-center gap-2 z-10 shrink-0">
                   <h2 className="font-black text-slate-800 flex items-center tracking-tight">
                       <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mr-3"><i className="fas fa-shopping-cart"></i></div>
                       SATIŞ FİŞİ
@@ -224,7 +224,7 @@ export default function PosEkrani() {
                   </div>
               </div>
               
-              <div className="flex-1 overflow-y-auto bg-white p-2 max-h-[40vh] lg:max-h-none">
+              <div className="flex-1 overflow-y-auto bg-white p-2 max-h-[40vh] md:max-h-none">
                   {sepet.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
                           <i className="fas fa-barcode text-6xl opacity-50"></i>
@@ -264,14 +264,14 @@ export default function PosEkrani() {
               </div>
 
               {/* DEV GENEL TOPLAM ALANI */}
-              <div className="bg-slate-900 text-white p-4 lg:p-6 shrink-0 relative overflow-hidden sticky bottom-0 z-10">
+              <div className="bg-slate-900 text-white p-4 md:p-6 shrink-0 relative overflow-hidden sticky bottom-0 z-10">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl"></div>
                   <div className="flex justify-between items-end relative z-10">
                       <div>
                           <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ödenecek Tutar</p>
                           <p className="text-slate-500 font-semibold text-sm">Toplam {sepet.reduce((sum, item) => sum + item.miktar, 0)} Ürün</p>
                       </div>
-                      <div className="text-3xl lg:text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
+                      <div className="text-3xl md:text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
                           {genelToplam.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-2xl text-emerald-600 align-super">TL</span>
                       </div>
                   </div>
@@ -279,7 +279,7 @@ export default function PosEkrani() {
           </div>
 
           {/* SÜTUN 2: BARKOD GİRİŞİ & NUMPAD & ÖDEME */}
-          <div className="w-full lg:w-[33%] flex flex-col gap-4">
+          <div className="w-full md:w-[33%] flex flex-col gap-4">
               
               {/* Barkod Okutma Alanı */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 shrink-0 relative overflow-hidden group focus-within:border-blue-400 transition-colors">
@@ -315,7 +315,7 @@ export default function PosEkrani() {
               </div>
 
               {/* Ödeme Butonları (Klasik Renk Kodlaması) */}
-              <div className="grid grid-cols-2 grid-rows-2 gap-3 h-40 lg:h-40 shrink-0">
+              <div className="grid grid-cols-2 grid-rows-2 gap-3 h-40 md:h-40 shrink-0">
                   <button onClick={() => odemeAl("NAKIT")} disabled={islemYapiliyor || sepet.length === 0} className="py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xl shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex flex-col items-center justify-center gap-1">
                       <i className="fas fa-money-bill-wave text-2xl"></i> NAKİT
                   </button>
@@ -332,7 +332,7 @@ export default function PosEkrani() {
           </div>
 
           {/* SÜTUN 3: MÜŞTERİ, YENİ ÖZELLİKLER & İŞLEMLER */}
-          <div className="w-full lg:w-[25%] flex flex-col gap-4">
+          <div className="w-full md:w-[25%] flex flex-col gap-4">
               
               {/* Hızlı İşlemler */}
               <div className="flex-1 bg-white border border-slate-200 p-3 grid grid-cols-2 gap-2 auto-rows-min">
@@ -364,7 +364,7 @@ export default function PosEkrani() {
       {/* --- MANUEL ÜRÜN ARAMA MODALI --- */}
       {aramaModalAcik && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden border border-slate-300 h-[90vh] lg:h-[85vh]">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden border border-slate-300 h-[90vh] md:h-[85vh]">
             
             {/* Modal Header & Arama Çubuğu */}
             <div className="bg-slate-50 border-b border-slate-200 p-6 shrink-0 flex items-center gap-4">

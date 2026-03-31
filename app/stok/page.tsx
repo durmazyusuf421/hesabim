@@ -8,6 +8,7 @@ import Link from "next/link";
 interface Urun {
     id: number; urun_adi: string; barkod?: string; stok_miktari: number;
     birim: string; alis_fiyati: number; satis_fiyati: number; kdv_orani: number;
+    aktif?: boolean;
 }
 interface FormDataState {
     urun_adi: string; barkod: string; stok_miktari: number; birim: string;
@@ -25,6 +26,7 @@ export default function StokKartlari() {
   const [modalAcik, setModalAcik] = useState(false);
   const [duzenlemeModu, setDuzenlemeModu] = useState(false);
   const [seciliUrunId, setSeciliUrunId] = useState<number | null>(null);
+  const [aktifSekme, setAktifSekme] = useState<"aktif" | "pasif">("aktif");
 
   const [formData, setFormData] = useState<FormDataState>({
       urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20
@@ -105,7 +107,17 @@ export default function StokKartlari() {
       });
   };
 
-  const filtrelenmisUrunler = urunler.filter(u => u.urun_adi.toLowerCase().includes(aramaTerimi.toLowerCase()) || (u.barkod && u.barkod.includes(aramaTerimi)));
+  const urunAktiflikDegistir = async (urun: Urun) => {
+      const yeniDurum = !(urun.aktif !== false);
+      const { error } = await supabase.from("urunler").update({ aktif: yeniDurum }).eq("id", urun.id);
+      if (error) { toast.error("Hata: " + error.message); return; }
+      toast.success(yeniDurum ? "Ürün aktif edildi." : "Ürün pasif edildi.");
+      if (aktifSirket) verileriGetir(aktifSirket.id);
+  };
+
+  const filtrelenmisUrunler = urunler
+      .filter(u => aktifSekme === "aktif" ? (u.aktif !== false) : (u.aktif === false))
+      .filter(u => u.urun_adi.toLowerCase().includes(aramaTerimi.toLowerCase()) || (u.barkod && u.barkod.includes(aramaTerimi)));
 
   if (!aktifSirket) return <div className="h-full flex items-center justify-center font-bold text-slate-500" style={{ background: "var(--c-bg)" }}>Sistem Doğrulanıyor...</div>;
 
@@ -131,6 +143,15 @@ export default function StokKartlari() {
                     </div>
                 </div>
 
+                <div className="flex items-center gap-0 px-4 pt-2 shrink-0">
+                    <button onClick={() => setAktifSekme("aktif")} className={`px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider border border-slate-200 transition-colors ${aktifSekme === "aktif" ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                        <i className="fas fa-check-circle mr-1.5" />Aktif Ürünler ({urunler.filter(u => u.aktif !== false).length})
+                    </button>
+                    <button onClick={() => setAktifSekme("pasif")} className={`px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider border border-slate-200 border-l-0 transition-colors ${aktifSekme === "pasif" ? "bg-red-500 text-white border-red-500" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
+                        <i className="fas fa-ban mr-1.5" />Pasif Ürünler ({urunler.filter(u => u.aktif === false).length})
+                    </button>
+                </div>
+
                 <div className="flex-1 overflow-auto relative" style={{ background: "var(--c-bg)" }}>
                     {/* MOBİL KART GÖRÜNÜMÜ */}
                     <div className="md:hidden space-y-2 p-3">
@@ -148,6 +169,9 @@ export default function StokKartlari() {
                                     <div className="text-[11px] text-[#64748b]">{u.barkod ? `Barkod: ${u.barkod}` : 'Barkod yok'} | KDV: %{u.kdv_orani}</div>
                                     <div className="flex justify-between items-center mt-2">
                                         <div className="flex items-center gap-2">
+                                            <button onClick={() => urunAktiflikDegistir(u)} className={`px-2 py-1 text-[10px] font-bold border transition-colors ${u.aktif !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'}`} title={u.aktif !== false ? "Pasif Yap" : "Aktif Yap"}>
+                                                <i className={`fas ${u.aktif !== false ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>{u.aktif !== false ? 'Aktif' : 'Pasif'}
+                                            </button>
                                             <button onClick={() => urunDuzenle(u)} className="btn-secondary px-2 py-1 text-[10px]" title="Düzenle"><i className="fas fa-edit"></i></button>
                                             <button onClick={() => urunSil(u.id)} className="btn-secondary px-2 py-1 text-[10px]" title="Sil"><i className="fas fa-trash"></i></button>
                                         </div>
@@ -173,14 +197,15 @@ export default function StokKartlari() {
                                     <th className="w-28 text-right">Alış Fiyatı</th>
                                     <th className="w-28 text-right">Satış Fiyatı</th>
                                     <th className="w-20 text-center">KDV (%)</th>
+                                    <th className="w-20 text-center print:hidden">Durum</th>
                                     <th className="w-24 text-center print:hidden">İşlem</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {yukleniyor ? (
-                                    <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                                    <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
                                 ) : filtrelenmisUrunler.length === 0 ? (
-                                    <tr><td colSpan={9} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Stok Kartı Bulunamadı</td></tr>
+                                    <tr><td colSpan={10} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Stok Kartı Bulunamadı</td></tr>
                                 ) : (
                                     filtrelenmisUrunler.map((u) => (
                                         <tr key={u.id} className="text-[11px] font-medium border-b border-slate-200 hover:bg-slate-50 transition-colors">
@@ -192,6 +217,11 @@ export default function StokKartlari() {
                                             <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-slate-500">{Number(u.alis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
                                             <td className="p-1.5 border-r border-slate-200 text-right font-semibold text-[#1d4ed8]">{Number(u.satis_fiyati).toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</td>
                                             <td className="p-1.5 border-r border-slate-200 text-center text-slate-500">% {u.kdv_orani}</td>
+                                            <td className="p-1.5 border-r border-slate-200 text-center print:hidden">
+                                                <button onClick={() => urunAktiflikDegistir(u)} className={`px-2 py-0.5 text-[10px] font-bold border transition-colors cursor-pointer ${u.aktif !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100'}`}>
+                                                    <i className={`fas ${u.aktif !== false ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`}></i>{u.aktif !== false ? 'Aktif' : 'Pasif'}
+                                                </button>
+                                            </td>
                                             <td className="p-1.5 border-r border-slate-200 text-center print:hidden">
                                                 <div className="flex justify-center space-x-1">
                                                     <button onClick={() => urunDuzenle(u)} className="btn-secondary px-2 py-1" title="Düzenle"><i className="fas fa-edit"></i></button>

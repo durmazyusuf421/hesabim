@@ -33,7 +33,10 @@
       "Bash(cp app/globals.css app/globals.css.bak)",
       "Bash(cp app/layout.tsx app/layout.tsx.bak)",
       "Bash(cp app/AppWrapper.tsx app/AppWrapper.tsx.bak)",
-      "Bash(cp app/dashboard/page.tsx app/dashboard/page.tsx.bak)"
+      "Bash(cp app/dashboard/page.tsx app/dashboard/page.tsx.bak)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }

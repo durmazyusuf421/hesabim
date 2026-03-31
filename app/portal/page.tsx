@@ -8,8 +8,11 @@ import { useOnayModal } from "@/app/lib/useOnayModal";
 interface Toptanci {
   id: number;
   isletme_adi: string;
+  unvan?: string;
   il?: string;
+  ilce?: string;
   telefon?: string;
+  adres?: string;
   rol: string;
 }
 
@@ -62,8 +65,12 @@ export default function MusteriPortali() {
   const [kesfetArama, setKesfetArama] = useState("");
   const [kesfetIl, setKesfetIl] = useState("");
   const [siparisGonderiliyor, setSiparisGonderiliyor] = useState(false);
+  const [acikDetayId, setAcikDetayId] = useState<number | null>(null);
+  const [detayUrunler, setDetayUrunler] = useState<{[key: number]: { sayi: number; ornekler: string[] }}>({});
   // WhatsApp bildirim modal state
   const [whatsappModal, setWhatsappModal] = useState<{ linkler: { toptanciAdi: string; url: string }[] } | null>(null);
+  // Onay bekleyen sipariş sayısı
+  const [onayBekleyenSayisi, setOnayBekleyenSayisi] = useState(0);
 
   useEffect(() => {
     if (!aktifMusteri) return;
@@ -82,16 +89,33 @@ export default function MusteriPortali() {
 
     const onaylilar = (baglantiData || []).filter(b => b.durum === 'ONAYLANDI').map(b => b.toptanci_id);
     if (onaylilar.length > 0) {
-        const { data: urunData } = await supabase.from("urunler").select("*").in("sahip_sirket_id", onaylilar).order('urun_adi');
+        const { data: urunData } = await supabase.from("urunler").select("*").in("sahip_sirket_id", onaylilar).neq("aktif", false).order('urun_adi');
         setTumUrunler(urunData || []);
     } else {
         setTumUrunler([]);
     }
+    // Onay bekleyen sipariş sayısını çek
+    const { data: cariKartlar } = await supabase.from("firmalar").select("id").eq("bagli_sirket_id", aktifMusteri.id);
+    if (cariKartlar && cariKartlar.length > 0) {
+        const cariIdler = cariKartlar.map(c => c.id);
+        const { count } = await supabase.from("siparisler").select("id", { count: "exact", head: true }).in("alici_firma_id", cariIdler).eq("durum", "MARKET_ONAYI_BEKLENIYOR");
+        setOnayBekleyenSayisi(count || 0);
+    }
+
     setYukleniyor(false);
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { verileriGetir(); }, [aktifMusteri]);
+
+  const detayAcKapat = async (toptanciId: number) => {
+      if (acikDetayId === toptanciId) { setAcikDetayId(null); return; }
+      setAcikDetayId(toptanciId);
+      if (!detayUrunler[toptanciId]) {
+          const { data, count } = await supabase.from("urunler").select("urun_adi", { count: "exact" }).eq("sahip_sirket_id", toptanciId).neq("aktif", false).order("urun_adi").limit(5);
+          setDetayUrunler(prev => ({ ...prev, [toptanciId]: { sayi: count || 0, ornekler: (data || []).map(u => u.urun_adi) } }));
+      }
+  };
 
   const istekGonder = async (toptanciId: number, toptanciAdi: string) => {
       if (!aktifMusteri) return;
@@ -228,6 +252,20 @@ export default function MusteriPortali() {
               </select>
           </div>
 
+          {/* ONAY BEKLEYEN SİPARİŞ UYARISI */}
+          {onayBekleyenSayisi > 0 && (
+              <div className="mx-4 mt-2 p-3 bg-amber-50 flex items-center justify-between gap-3" style={{ border: "1px solid #fbbf24" }}>
+                  <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-amber-100 text-amber-600 flex items-center justify-center shrink-0"><i className="fas fa-bell"></i></div>
+                      <div>
+                          <div className="text-[12px] font-semibold text-amber-800">Onay bekleyen siparişleriniz var! <span className="ml-1 bg-[#dc2626] text-white text-[10px] font-bold px-1.5 py-0.5 inline-block">{onayBekleyenSayisi}</span></div>
+                          <div className="text-[10px] text-amber-600">Toptancınız fiyat/miktar düzenlemesi yaptı. Kontrol edin.</div>
+                      </div>
+                  </div>
+                  <a href="/portal/siparisler" className="btn-primary text-xs whitespace-nowrap" style={{ background: "#f59e0b" }}><i className="fas fa-arrow-right mr-1.5"></i> Siparişlerime Git</a>
+              </div>
+          )}
+
           <div className="flex-1 overflow-auto relative">
               <table className="tbl-kurumsal">
                   <thead>
@@ -337,23 +375,87 @@ export default function MusteriPortali() {
                     </select>
                 </div>
             </div>
-            <div className="flex-1 overflow-auto p-0">
-                <table className="tbl-kurumsal">
-                    <thead><tr><th className="w-16 text-center">İl</th><th>Tedarikçi Firma Ünvanı</th><th className="w-32">Telefon</th><th className="w-32 text-center">İşlem</th></tr></thead>
-                    <tbody>
-                        {filtrelenmisDigerToptancilar.length === 0 ? ( <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-semibold uppercase tracking-widest">Aradığınız kritere uygun toptancı bulunamadı.</td></tr> ) : (
-                            filtrelenmisDigerToptancilar.map(t => {
-                                const durum = baglantilar.find(b => b.toptanci_id === t.id)?.durum;
-                                return (
-                                    <tr key={t.id}>
-                                        <td className="text-center font-semibold text-slate-500 uppercase">{t.il}</td><td className="font-semibold text-slate-800">{t.isletme_adi}</td><td>{t.telefon}</td>
-                                        <td className="text-center">{!durum ? <button onClick={() => istekGonder(t.id, t.isletme_adi)} className="btn-primary text-xs w-full">İstek Gönder</button> : durum === 'BEKLIYOR' ? <span className="badge-durum badge-bekliyor">Bekliyor</span> : <span className="badge-durum badge-iptal">Reddedildi</span>}</td>
-                                    </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
+            <div className="flex-1 overflow-auto p-3 space-y-2">
+                {filtrelenmisDigerToptancilar.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 font-semibold uppercase tracking-widest">Aradığınız kritere uygun toptancı bulunamadı.</div>
+                ) : (
+                    filtrelenmisDigerToptancilar.map(t => {
+                        const durum = baglantilar.find(b => b.toptanci_id === t.id)?.durum;
+                        const acik = acikDetayId === t.id;
+                        const urunBilgi = detayUrunler[t.id];
+                        return (
+                            <div key={t.id} className={`border bg-white transition-colors ${acik ? 'border-blue-300 shadow-sm' : 'border-slate-200 hover:border-slate-300'}`}>
+                                {/* Satır Başlığı */}
+                                <button onClick={() => detayAcKapat(t.id)} className="w-full text-left px-4 py-3 flex items-center gap-3 group">
+                                    <i className={`fas fa-chevron-right text-[10px] text-slate-400 transition-transform ${acik ? 'rotate-90' : ''}`}></i>
+                                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-slate-100 text-slate-500 flex items-center justify-center shrink-0"><i className="fas fa-store text-xs"></i></div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-[12px] font-semibold text-slate-800 truncate">{t.isletme_adi}</div>
+                                            <div className="text-[10px] text-slate-400">{t.il}{t.ilce ? ` / ${t.ilce}` : ''}</div>
+                                        </div>
+                                    </div>
+                                    {durum && (
+                                        <span className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest shrink-0 ${durum === 'BEKLIYOR' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-red-50 text-[#dc2626] border border-red-200'}`}>
+                                            {durum === 'BEKLIYOR' ? 'Bekliyor' : 'Reddedildi'}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* Genişletilmiş Detay */}
+                                {acik && (
+                                    <div className="px-4 pb-4 pt-1" style={{ borderTop: "1px solid var(--c-border)" }}>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+                                            <div>
+                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Firma Ünvanı</div>
+                                                <div className="text-[11px] font-semibold text-slate-700">{t.unvan || t.isletme_adi}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">İl / İlçe</div>
+                                                <div className="text-[11px] font-semibold text-slate-700">{t.il || '-'}{t.ilce ? ` / ${t.ilce}` : ''}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-0.5">Telefon</div>
+                                                <div className="text-[11px] font-semibold text-slate-700">{t.telefon || '-'}</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Ürün Bilgisi */}
+                                        <div className="bg-slate-50 border border-slate-200 p-3 mb-3">
+                                            {!urunBilgi ? (
+                                                <div className="text-[11px] text-slate-400 flex items-center gap-2"><i className="fas fa-circle-notch fa-spin text-[10px]"></i> Ürünler yükleniyor...</div>
+                                            ) : urunBilgi.sayi === 0 ? (
+                                                <div className="text-[11px] text-slate-400 font-semibold">Henüz ürün bilgisi yok</div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                        <i className="fas fa-boxes text-[#1d4ed8] text-[10px]"></i>
+                                                        <span className="text-[11px] font-semibold text-[#1d4ed8]">{urunBilgi.sayi} çeşit ürün</span>
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-600">
+                                                        {urunBilgi.ornekler.join(', ')}{urunBilgi.sayi > 5 ? '...' : ''}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* Aksiyon */}
+                                        {!durum ? (
+                                            <button onClick={(e) => { e.stopPropagation(); istekGonder(t.id, t.isletme_adi); }} className="btn-primary text-xs w-full sm:w-auto">
+                                                <i className="fas fa-handshake mr-2"></i>Çalışma İsteği Gönder
+                                            </button>
+                                        ) : (
+                                            <div className={`flex items-center gap-2 text-[11px] font-semibold ${durum === 'BEKLIYOR' ? 'text-amber-600' : 'text-[#dc2626]'}`}>
+                                                <i className={`fas ${durum === 'BEKLIYOR' ? 'fa-clock' : 'fa-times-circle'}`}></i>
+                                                {durum === 'BEKLIYOR' ? 'Bağlantı isteğiniz onay bekliyor' : 'Bağlantı isteğiniz reddedildi'}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
             </div>
           </div>
         </div>

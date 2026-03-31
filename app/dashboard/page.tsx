@@ -55,6 +55,7 @@ export default function AnaSayfa() {
     const bugunkuSiparisler = useMemo(() => siparisler.filter(s => s.created_at?.startsWith(bugun)), [siparisler, bugun]);
     const bugunkuCiro = useMemo(() => bugunkuSiparisler.reduce((acc, s) => acc + parseTutar(s.toplam_tutar), 0), [bugunkuSiparisler]);
     const bekleyenSayisi = useMemo(() => siparisler.filter(s => s.durum === "YENI" || s.durum === "HAZIRLANIYOR" || s.durum === "Onay Bekliyor").length, [siparisler]);
+    const marketOnayBekleyen = useMemo(() => siparisler.filter(s => s.durum === "MARKET_ONAYI_BEKLENIYOR").length, [siparisler]);
 
     const aylikGrafik = useMemo((): AylikVeri[] => {
         const ayIsimleri = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
@@ -105,6 +106,11 @@ export default function AnaSayfa() {
                     <div className="metric-value">{toplamMusteri}</div>
                     <div className="metric-sub">kayıtlı cari kart</div>
                 </div>
+                <div className="metric-block">
+                    <div className="metric-label">Market Onayı Bekleyen</div>
+                    <div className="metric-value" style={{ color: marketOnayBekleyen > 0 ? "#dc2626" : "#f1f5f9" }}>{marketOnayBekleyen}</div>
+                    <div className="metric-sub">mutabakat bekliyor</div>
+                </div>
                 {yukleniyor && <div className="metric-block flex items-center"><i className="fas fa-circle-notch fa-spin text-[#475569] text-sm" /></div>}
             </div>
 
@@ -120,6 +126,21 @@ export default function AnaSayfa() {
                                 </div>
                             </div>
                             <Link href="/cari?sekme=istekler" className="btn-primary flex items-center gap-2" style={{ background: "#dc2626" }}><i className="fas fa-eye text-[10px]" /> İNCELE</Link>
+                        </div>
+                    </div>
+                )}
+
+                {marketOnayBekleyen > 0 && (
+                    <div className="card-kurumsal" style={{ borderLeft: "3px solid #f59e0b" }}>
+                        <div className="flex items-center justify-between px-5 py-3">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-amber-50 text-amber-500 flex items-center justify-center shrink-0"><i className="fas fa-clipboard-check" /></div>
+                                <div>
+                                    <div className="text-[12px] font-semibold text-[#0f172a]">Market Onayı Bekleyen Siparişler</div>
+                                    <div className="text-[11px] text-[#64748b] mt-0.5"><span className="font-bold text-amber-600">{marketOnayBekleyen}</span> adet sipariş market onayı bekliyor</div>
+                                </div>
+                            </div>
+                            <Link href="/" className="btn-primary flex items-center gap-2" style={{ background: "#f59e0b" }}><i className="fas fa-eye text-[10px]" /> SİPARİŞLERE GİT</Link>
                         </div>
                     </div>
                 )}
