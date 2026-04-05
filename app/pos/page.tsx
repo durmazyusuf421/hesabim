@@ -45,7 +45,7 @@ export default function PosEkrani() {
         try {
             const [dbUrunler, dbCariler] = await Promise.all([
                 supabase.from("urunler").select("*").or(`sahip_sirket_id.eq.${sirketId},sirket_id.eq.${sirketId}`),
-                supabase.from("cari_kartlar").select("*").or(`sahip_sirket_id.eq.${sirketId},sirket_id.eq.${sirketId}`)
+                supabase.from("firmalar").select("*").eq("sahip_sirket_id", sirketId)
             ]);
             if (dbUrunler.data) setUrunler(dbUrunler.data);
             if (dbCariler.data) setCariler(dbCariler.data);
@@ -100,8 +100,29 @@ export default function PosEkrani() {
     const sepettenCikar = (urunId: number) => { setSepet(prev => prev.filter(item => item.urun.id !== urunId)); };
 
     const araToplam = sepet.reduce((acc, item) => acc + (item.fiyat * item.miktar), 0);
-    const kdvToplam = araToplam * 0.20; 
-    const genelToplam = araToplam + kdvToplam;
+    const kdvToplam = araToplam * 0.20;
+
+    // Kampanya indirimi
+    const [aktifKampanyalar, setAktifKampanyalar] = useState<{id:number;kampanya_adi:string;indirim_tipi:string;indirim_degeri:number;min_siparis_tutari:number}[]>([]);
+    useEffect(() => {
+        if (!aktifSirket) return;
+        const bugun = new Date().toISOString().split("T")[0];
+        supabase.from("kampanyalar").select("id,kampanya_adi,indirim_tipi,indirim_degeri,min_siparis_tutari").eq("sirket_id", aktifSirket.id).eq("aktif", true).lte("baslangic_tarihi", bugun).gte("bitis_tarihi", bugun).then(({ data }) => setAktifKampanyalar(data || []));
+    }, [aktifSirket]);
+
+    const kampanyaHesapla = () => {
+        const toplam = araToplam + kdvToplam;
+        let enIyiIndirim = 0;
+        let enIyiKampanya = "";
+        aktifKampanyalar.forEach(k => {
+            if (toplam < (Number(k.min_siparis_tutari) || 0)) return;
+            const indirim = k.indirim_tipi === "YUZDE" ? toplam * (k.indirim_degeri / 100) : Number(k.indirim_degeri);
+            if (indirim > enIyiIndirim) { enIyiIndirim = indirim; enIyiKampanya = k.kampanya_adi; }
+        });
+        return { indirim: enIyiIndirim, kampanyaAdi: enIyiKampanya };
+    };
+    const kampanyaIndirimSonuc = kampanyaHesapla();
+    const genelToplam = Math.max(araToplam + kdvToplam - kampanyaIndirimSonuc.indirim, 0);
 
     const satisiTamamla = async (odemeTipi: 'NAKİT' | 'KREDİ KARTI' | 'VERESİYE') => {
         if (sepet.length === 0) { toast.error("Sepet boş!"); return; }
@@ -210,6 +231,12 @@ export default function PosEkrani() {
                             </div>
 
                             <div className="bg-white border-t border-slate-200 p-2 md:p-5 shrink-0 shadow-[0_-10px_20px_rgba(0,0,0,0.02)]">
+                                {kampanyaIndirimSonuc.indirim > 0 && (
+                                    <div className="flex justify-between items-center pb-1.5 mb-1.5 border-b border-dashed border-purple-200">
+                                        <span className="text-[9px] md:text-[10px] font-bold text-[#7c3aed] uppercase tracking-wider"><i className="fas fa-tags mr-1 text-[8px]" />{kampanyaIndirimSonuc.kampanyaAdi}</span>
+                                        <span className="text-sm md:text-base font-black text-[#dc2626]">-{kampanyaIndirimSonuc.indirim.toLocaleString('tr-TR', {minimumFractionDigits:2})} ₺</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between items-end pb-2 md:pb-4 mb-2 md:mb-4 border-b border-dashed border-slate-200">
                                     <span className="text-xs md:text-sm font-black text-slate-800 uppercase tracking-widest">Toplam</span>
                                     <span className="text-xl md:text-2xl font-black text-emerald-600">{genelToplam.toLocaleString('tr-TR', {minimumFractionDigits:2})} <span className="text-sm md:text-lg">₺</span></span>

@@ -11,6 +11,7 @@ interface Personel {
     eposta: string;
     sifre: string;
     rol: string;
+    plasiyer?: boolean;
 }
 interface FirmaDataState {
     isletme_adi: string; unvan: string; vergi_dairesi: string; vergi_no: string;
@@ -27,7 +28,17 @@ export default function AyarlarEkrani() {
 
   const [yukleniyor, setYukleniyor] = useState(true);
   const [kaydediliyor, setKaydediliyor] = useState(false);
-  const [aktifSekme, setAktifSekme] = useState<"FIRMA" | "PERSONEL" | "ABONELIK">("FIRMA");
+  const [aktifSekme, setAktifSekme] = useState<"FIRMA" | "PERSONEL" | "DOVIZ" | "ABONELIK">("FIRMA");
+  const [dovizUSD, setDovizUSD] = useState("");
+  const [dovizEUR, setDovizEUR] = useState("");
+  const [dovizSonGuncelleme, setDovizSonGuncelleme] = useState("");
+  const [dovizSonSaat, setDovizSonSaat] = useState("");
+  const [dovizKaydediliyor, setDovizKaydediliyor] = useState(false);
+  const [dovizTcmbTarih, setDovizTcmbTarih] = useState("");
+  const [dovizOtomatik, setDovizOtomatik] = useState(() => {
+      if (typeof window !== "undefined") return localStorage.getItem("doviz_otomatik_guncelleme") !== "false";
+      return true;
+  });
 
   const [formData, setFormData] = useState<FirmaDataState>({
       isletme_adi: "", unvan: "", vergi_dairesi: "", vergi_no: "",
@@ -67,6 +78,20 @@ export default function AyarlarEkrani() {
     if (kullaniciRol.includes("YONETICI")) {
         verileriGetir(aktifSirket.id);
         personelleriGetir(aktifSirket.id);
+        // Ana Depo otomatik oluştur
+        supabase.from("depolar").select("id").eq("sirket_id", aktifSirket.id).limit(1).then(async ({ data }) => {
+            if (!data || data.length === 0) {
+                await supabase.from("depolar").insert({ sirket_id: aktifSirket!.id, depo_adi: "Ana Depo" });
+            }
+        });
+        // Döviz kurlarını çek
+        supabase.from("doviz_kurlari").select("*").order("tarih", { ascending: false }).limit(10).then(({ data }) => {
+            const kurlar = data || [];
+            const usd = kurlar.find(k => k.doviz_turu === "USD");
+            const eur = kurlar.find(k => k.doviz_turu === "EUR");
+            if (usd) { setDovizUSD(String(usd.kur)); setDovizSonGuncelleme(usd.tarih); }
+            if (eur) { setDovizEUR(String(eur.kur)); if (!usd) setDovizSonGuncelleme(eur.tarih); }
+        });
     } else {
         setYukleniyor(false);
     }
@@ -185,6 +210,7 @@ export default function AyarlarEkrani() {
                         <div className="flex gap-2 overflow-x-auto custom-scrollbar">
                             <button onClick={() => setAktifSekme("FIRMA")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "FIRMA" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Firma Bilgileri</button>
                             <button onClick={() => setAktifSekme("PERSONEL")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "PERSONEL" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Personeller & Yetkiler</button>
+                            <button onClick={() => setAktifSekme("DOVIZ")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "DOVIZ" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Döviz Kurları</button>
                             <button onClick={() => setAktifSekme("ABONELIK")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "ABONELIK" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Abonelik</button>
                         </div>
                         <div className="w-full md:w-auto">
@@ -235,11 +261,11 @@ export default function AyarlarEkrani() {
                                 <table className="tbl-kurumsal w-full text-left border-collapse whitespace-nowrap min-w-[700px]">
                                     <thead className="border-b border-[var(--c-border)]" style={{ background: "#f8fafc" }}>
                                         <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
-                                            <th className="p-4 border-r border-[var(--c-border)]">Ad Soyad</th><th className="p-4 border-r border-[var(--c-border)]">Giriş E-Postası</th><th className="p-4 border-r border-[var(--c-border)] w-64 text-left">Yetki Alanları (Roller)</th><th className="p-4 w-24 text-center">İşlem</th>
+                                            <th className="p-4 border-r border-[var(--c-border)]">Ad Soyad</th><th className="p-4 border-r border-[var(--c-border)]">Giriş E-Postası</th><th className="p-4 border-r border-[var(--c-border)] w-64 text-left">Yetki Alanları (Roller)</th><th className="p-4 border-r border-[var(--c-border)] w-24 text-center">Plasiyer</th><th className="p-4 w-24 text-center">İşlem</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {personeller.length === 0 ? (<tr><td colSpan={4} className="p-10 text-center text-slate-400 font-semibold uppercase tracking-widest">Kayıtlı alt personeliniz bulunmuyor.</td></tr>) : (
+                                        {personeller.length === 0 ? (<tr><td colSpan={5} className="p-10 text-center text-slate-400 font-semibold uppercase tracking-widest">Kayıtlı alt personeliniz bulunmuyor.</td></tr>) : (
                                             personeller.map(p => {
                                                 const roller = p.rol ? p.rol.split(',') : [];
                                                 return (
@@ -252,6 +278,15 @@ export default function AyarlarEkrani() {
                                                                 ))}
                                                             </div>
                                                         </td>
+                                                        <td className="p-4 text-center">
+                                                            <button onClick={async () => {
+                                                                const yeni = !p.plasiyer;
+                                                                await supabase.from("alt_kullanicilar").update({ plasiyer: yeni }).eq("id", p.id);
+                                                                if (aktifSirket) personelleriGetir(aktifSirket.id);
+                                                            }} className={`px-2 py-0.5 text-[10px] font-bold border transition-colors ${p.plasiyer ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
+                                                                <i className={`fas ${p.plasiyer ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`} />{p.plasiyer ? 'Evet' : 'Hayır'}
+                                                            </button>
+                                                        </td>
                                                         <td className="p-4 text-center flex space-x-1 justify-center">
                                                             <button onClick={() => personelDuzenle(p)} className="w-8 h-8 bg-white border border-[var(--c-border)] text-[#1d4ed8] hover:bg-blue-50 hover:border-blue-200 transition-all" title="Düzenle"><i className="fas fa-edit"></i></button>
                                                             <button onClick={() => personelSil(p.id)} className="w-8 h-8 bg-white border border-[var(--c-border)] text-[#dc2626] hover:bg-red-50 hover:border-red-200 transition-all" title="Sil"><i className="fas fa-trash"></i></button>
@@ -262,6 +297,107 @@ export default function AyarlarEkrani() {
                                         )}
                                     </tbody>
                                 </table>
+                            </div>
+                        )}
+                        {aktifSekme === "DOVIZ" && (
+                            <div className="p-4 md:p-8 animate-in fade-in">
+                                <div className="max-w-lg space-y-4">
+                                    <div>
+                                        <h3 className="text-[13px] font-semibold text-[#0f172a] mb-1">Döviz Kurları (TCMB)</h3>
+                                        <p className="text-[10px] text-[#94a3b8]">T.C. Merkez Bankası güncel döviz satış kurları otomatik çekilir.</p>
+                                    </div>
+
+                                    {/* Kur Kartları */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="p-4 border border-[#e2e8f0]" style={{ background: "#f8fafc" }}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-8 h-8 bg-[#059669] text-white flex items-center justify-center text-[11px] font-bold shrink-0">$</div>
+                                                <div>
+                                                    <div className="text-[9px] text-[#94a3b8] uppercase tracking-wider font-semibold">ABD Doları (USD)</div>
+                                                    <div className="text-[10px] text-[#64748b]">1 USD = ? TL</div>
+                                                </div>
+                                            </div>
+                                            <div className="text-[22px] font-bold text-[#0f172a] tabular-nums">{dovizUSD ? Number(dovizUSD).toLocaleString("tr-TR", { minimumFractionDigits: 4 }) : "—"} <span className="text-[12px] text-[#94a3b8]">₺</span></div>
+                                        </div>
+                                        <div className="p-4 border border-[#e2e8f0]" style={{ background: "#f8fafc" }}>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-8 h-8 bg-[#3b82f6] text-white flex items-center justify-center text-[11px] font-bold shrink-0">€</div>
+                                                <div>
+                                                    <div className="text-[9px] text-[#94a3b8] uppercase tracking-wider font-semibold">Euro (EUR)</div>
+                                                    <div className="text-[10px] text-[#64748b]">1 EUR = ? TL</div>
+                                                </div>
+                                            </div>
+                                            <div className="text-[22px] font-bold text-[#0f172a] tabular-nums">{dovizEUR ? Number(dovizEUR).toLocaleString("tr-TR", { minimumFractionDigits: 4 }) : "—"} <span className="text-[12px] text-[#94a3b8]">₺</span></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Güncelleme Bilgisi */}
+                                    <div className="flex items-center gap-3 text-[10px] text-[#94a3b8]">
+                                        {dovizTcmbTarih && <span>TCMB Tarihi: <span className="font-semibold text-[#475569]">{dovizTcmbTarih}</span></span>}
+                                        {dovizSonSaat && <span>· Son güncelleme: <span className="font-semibold text-[#475569]">{new Date(dovizSonSaat).toLocaleString("tr-TR")}</span></span>}
+                                    </div>
+
+                                    {/* Otomatik Güncelleme Toggle */}
+                                    <div className="flex items-center justify-between p-3 border border-[#e2e8f0]" style={{ background: "#f8fafc" }}>
+                                        <div>
+                                            <div className="text-[11px] font-semibold text-[#0f172a]">Otomatik Güncelleme</div>
+                                            <div className="text-[9px] text-[#94a3b8]">Uygulama açılışında günde bir kez TCMB kurlarını otomatik çeker</div>
+                                        </div>
+                                        <button onClick={() => {
+                                            const yeni = !dovizOtomatik;
+                                            setDovizOtomatik(yeni);
+                                            localStorage.setItem("doviz_otomatik_guncelleme", String(yeni));
+                                            toast.success(yeni ? "Otomatik güncelleme açıldı" : "Otomatik güncelleme kapatıldı");
+                                        }} className={`px-3 py-1 text-[10px] font-bold border transition-colors ${dovizOtomatik ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+                                            <i className={`fas ${dovizOtomatik ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1 text-[12px]`} />{dovizOtomatik ? 'Aktif' : 'Pasif'}
+                                        </button>
+                                    </div>
+
+                                    {/* Butonlar */}
+                                    <div className="flex items-center gap-2">
+                                        <button disabled={dovizKaydediliyor} onClick={async () => {
+                                            setDovizKaydediliyor(true);
+                                            try {
+                                                const res = await fetch("/api/doviz");
+                                                const data = await res.json();
+                                                if (data.USD > 0) setDovizUSD(String(data.USD));
+                                                if (data.EUR > 0) setDovizEUR(String(data.EUR));
+                                                if (data.tarih) setDovizTcmbTarih(data.tarih);
+                                                if (data.guncellenmeSaati) setDovizSonSaat(data.guncellenmeSaati);
+                                                // Supabase'e kaydet
+                                                const bugun = new Date().toISOString().split("T")[0];
+                                                if (data.USD > 0) await supabase.from("doviz_kurlari").upsert({ doviz_turu: "USD", kur: data.USD, tarih: bugun }, { onConflict: "doviz_turu,tarih", ignoreDuplicates: false });
+                                                if (data.EUR > 0) await supabase.from("doviz_kurlari").upsert({ doviz_turu: "EUR", kur: data.EUR, tarih: bugun }, { onConflict: "doviz_turu,tarih", ignoreDuplicates: false });
+                                                setDovizSonGuncelleme(bugun);
+                                                if (data.USD > 0 || data.EUR > 0) toast.success("TCMB kurları güncellendi ve kaydedildi");
+                                                else toast.error("TCMB verisi alınamadı, kurlar güncellenemedi");
+                                            } catch { toast.error("Kur güncelleme başarısız"); }
+                                            setDovizKaydediliyor(false);
+                                        }} className="btn-primary flex items-center gap-2">
+                                            {dovizKaydediliyor ? <i className="fas fa-circle-notch fa-spin text-[10px]" /> : <i className="fas fa-sync text-[10px]" />} TCMB Kurlarını Güncelle
+                                        </button>
+                                    </div>
+
+                                    {/* Manuel Düzenleme */}
+                                    <div className="pt-3" style={{ borderTop: "1px solid var(--c-border)" }}>
+                                        <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-2">Manuel Düzeltme</div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <input type="number" min="0" step="0.0001" value={dovizUSD} onChange={e => setDovizUSD(e.target.value)} className="input-kurumsal w-full" placeholder="USD kuru" />
+                                            <input type="number" min="0" step="0.0001" value={dovizEUR} onChange={e => setDovizEUR(e.target.value)} className="input-kurumsal w-full" placeholder="EUR kuru" />
+                                        </div>
+                                        <button disabled={dovizKaydediliyor} onClick={async () => {
+                                            setDovizKaydediliyor(true);
+                                            const bugun = new Date().toISOString().split("T")[0];
+                                            if (Number(dovizUSD) > 0) await supabase.from("doviz_kurlari").upsert({ doviz_turu: "USD", kur: Number(dovizUSD), tarih: bugun }, { onConflict: "doviz_turu,tarih", ignoreDuplicates: false });
+                                            if (Number(dovizEUR) > 0) await supabase.from("doviz_kurlari").upsert({ doviz_turu: "EUR", kur: Number(dovizEUR), tarih: bugun }, { onConflict: "doviz_turu,tarih", ignoreDuplicates: false });
+                                            setDovizSonGuncelleme(bugun); setDovizSonSaat(new Date().toISOString());
+                                            toast.success("Manuel kurlar kaydedildi");
+                                            setDovizKaydediliyor(false);
+                                        }} className="btn-secondary flex items-center gap-2 mt-2 text-[10px]">
+                                            <i className="fas fa-save text-[9px]" /> Manuel Kaydet
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
                         {aktifSekme === "ABONELIK" && (

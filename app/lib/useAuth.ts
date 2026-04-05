@@ -136,14 +136,34 @@ export function useAuth(): AuthState {
 
     authBaslat();
 
-    // Auth state değişikliği: sadece sign-out'u dinle
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT" && mounted) {
+    // Auth state değişikliği
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (event === "SIGNED_OUT") {
         cozuldu.current = false;
         setAktifSirket(null);
         setKullanici(null);
         localStorage.removeItem("aktifSirket");
         localStorage.removeItem("aktifKullanici");
+      }
+
+      if (event === "TOKEN_REFRESHED" && !session) {
+        // Token yenilenemedi - geçersiz refresh token
+        localStorage.removeItem("aktifSirket");
+        localStorage.removeItem("aktifKullanici");
+        localStorage.removeItem("_lastActivity");
+        window.location.href = "/login";
+      }
+    });
+
+    // Geçersiz refresh token kontrolü
+    supabase.auth.getSession().then(({ error }) => {
+      if (error?.message?.includes("Invalid Refresh Token")) {
+        localStorage.removeItem("aktifSirket");
+        localStorage.removeItem("aktifKullanici");
+        localStorage.removeItem("_lastActivity");
+        window.location.href = "/login";
       }
     });
 

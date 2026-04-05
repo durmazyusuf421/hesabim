@@ -36,7 +36,8 @@
       "Bash(cp app/dashboard/page.tsx app/dashboard/page.tsx.bak)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(while read:*)"
     ]
   }
 }

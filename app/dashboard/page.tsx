@@ -27,6 +27,24 @@ export default function AnaSayfa() {
     const [firmaMap, setFirmaMap] = useState<Record<number, string>>({});
     const [toplamMusteri, setToplamMusteri] = useState(0);
     const [bekleyenB2B, setBekleyenB2B] = useState(0);
+    const [kritikStokSayisi, setKritikStokSayisi] = useState(0);
+    const [toplamBankaBakiye, setToplamBankaBakiye] = useState(0);
+    const [vadesiYaklasanCek, setVadesiYaklasanCek] = useState(0);
+    const [vadesiGecmisCek, setVadesiGecmisCek] = useState(0);
+    const [bugunkuZiyaret, setBugunkuZiyaret] = useState(0);
+    const [platinMusteri, setPlatinMusteri] = useState(0);
+    // Hedef takibi
+    const [hedefCiro, setHedefCiro] = useState(0);
+    const [hedefSiparis, setHedefSiparis] = useState(0);
+    const [hedefYeniMusteri, setHedefYeniMusteri] = useState(0);
+    const [gercekCiro, setGercekCiro] = useState(0);
+    const [gercekSiparis, setGercekSiparis] = useState(0);
+    const [gercekYeniMusteri, setGercekYeniMusteri] = useState(0);
+    const [hedefModalAcik, setHedefModalAcik] = useState(false);
+    const [hFormCiro, setHFormCiro] = useState("");
+    const [hFormSiparis, setHFormSiparis] = useState("");
+    const [hFormMusteri, setHFormMusteri] = useState("");
+    const [hedefKaydediliyor, setHedefKaydediliyor] = useState(false);
 
     useEffect(() => {
         if (!aktifSirket) return;
@@ -45,6 +63,42 @@ export default function AnaSayfa() {
                 setSiparisler(sData || []);
                 const { count } = await supabase.from("b2b_baglantilar").select("id", { count: "exact", head: true }).eq("toptanci_id", sirketId).eq("durum", "BEKLIYOR");
                 setBekleyenB2B(count || 0);
+                const { data: stokData } = await supabase.from("urunler").select("stok_miktari, min_stok_miktari").eq("sahip_sirket_id", sirketId).eq("aktif", true).gt("min_stok_miktari", 0);
+                if (stokData) { setKritikStokSayisi(stokData.filter(u => Number(u.stok_miktari) <= Number(u.min_stok_miktari)).length); }
+                const { data: bankaData } = await supabase.from("banka_hesaplari").select("bakiye").eq("sirket_id", sirketId).eq("aktif", true);
+                if (bankaData) { setToplamBankaBakiye(bankaData.reduce((t, h) => t + Number(h.bakiye), 0)); }
+                const bugunStr = new Date().toISOString().split("T")[0];
+                const yediGun = new Date(); yediGun.setDate(yediGun.getDate() + 7);
+                const yediGunStr = yediGun.toISOString().split("T")[0];
+                const { data: cekData } = await supabase.from("cek_senetler").select("vade_tarihi").eq("sirket_id", sirketId).eq("durum", "BEKLIYOR");
+                if (cekData) {
+                    setVadesiYaklasanCek(cekData.filter(c => c.vade_tarihi >= bugunStr && c.vade_tarihi <= yediGunStr).length);
+                    setVadesiGecmisCek(cekData.filter(c => c.vade_tarihi < bugunStr).length);
+                }
+                const { count: ziyaretCount } = await supabase.from("musteri_ziyaretleri").select("id", { count: "exact", head: true }).eq("sirket_id", sirketId).eq("ziyaret_tarihi", bugunStr);
+                setBugunkuZiyaret(ziyaretCount || 0);
+                const { count: platinCount } = await supabase.from("firmalar").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", sirketId).eq("musteri_seviyesi", "PLATİN");
+                setPlatinMusteri(platinCount || 0);
+                // Hedef takibi
+                const simdi = new Date();
+                const buAy = simdi.getMonth() + 1;
+                const buYil = simdi.getFullYear();
+                const ayBas = `${buYil}-${buAy.toString().padStart(2, "0")}-01`;
+                const { data: hedefData } = await supabase.from("satis_hedefleri").select("*").eq("sirket_id", sirketId).eq("yil", buYil).eq("ay", buAy).single();
+                if (hedefData) {
+                    setHedefCiro(Number(hedefData.hedef_ciro) || 0);
+                    setHedefSiparis(Number(hedefData.hedef_siparis_sayisi) || 0);
+                    setHedefYeniMusteri(Number(hedefData.hedef_yeni_musteri) || 0);
+                    setHFormCiro(String(hedefData.hedef_ciro || ""));
+                    setHFormSiparis(String(hedefData.hedef_siparis_sayisi || ""));
+                    setHFormMusteri(String(hedefData.hedef_yeni_musteri || ""));
+                }
+                // Bu ayki gerçekleşen değerler
+                const buAySip = (sData || []).filter(s => s.created_at?.startsWith(ayBas.substring(0, 7)) && s.durum !== "IPTAL");
+                setGercekSiparis(buAySip.length);
+                setGercekCiro(buAySip.filter(s => s.durum === "TAMAMLANDI").reduce((a, s) => a + parseTutar(s.toplam_tutar), 0));
+                const { count: yeniMusteriCount } = await supabase.from("firmalar").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", sirketId).gte("created_at", ayBas);
+                setGercekYeniMusteri(yeniMusteriCount || 0);
             } catch { /* */ }
             setYukleniyor(false);
         }
@@ -111,6 +165,21 @@ export default function AnaSayfa() {
                     <div className="metric-value" style={{ color: marketOnayBekleyen > 0 ? "#dc2626" : "#f1f5f9" }}>{marketOnayBekleyen}</div>
                     <div className="metric-sub">mutabakat bekliyor</div>
                 </div>
+                <div className="metric-block">
+                    <div className="metric-label">Banka Bakiyesi</div>
+                    <div className="metric-value" style={{ color: "#059669" }}>₺{fmtTL(toplamBankaBakiye)}</div>
+                    <div className="metric-sub">toplam banka</div>
+                </div>
+                <div className="metric-block">
+                    <div className="metric-label">Bugünkü Ziyaretler</div>
+                    <div className="metric-value" style={{ color: bugunkuZiyaret > 0 ? "#3b82f6" : "#94a3b8" }}>{bugunkuZiyaret}</div>
+                    <div className="metric-sub">müşteri ziyareti</div>
+                </div>
+                <div className="metric-block">
+                    <div className="metric-label">Platin Müşteriler</div>
+                    <div className="metric-value" style={{ color: platinMusteri > 0 ? "#7c3aed" : "#94a3b8" }}>{platinMusteri}</div>
+                    <div className="metric-sub">en değerli</div>
+                </div>
                 {yukleniyor && <div className="metric-block flex items-center"><i className="fas fa-circle-notch fa-spin text-[#475569] text-sm" /></div>}
             </div>
 
@@ -142,6 +211,93 @@ export default function AnaSayfa() {
                             </div>
                             <Link href="/" className="btn-primary flex items-center gap-2" style={{ background: "#f59e0b" }}><i className="fas fa-eye text-[10px]" /> SİPARİŞLERE GİT</Link>
                         </div>
+                    </div>
+                )}
+
+                {kritikStokSayisi > 0 && (
+                    <div className="card-kurumsal" style={{ borderLeft: "3px solid #dc2626" }}>
+                        <div className="flex items-center justify-between px-5 py-3">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-[#fef2f2] text-[#dc2626] flex items-center justify-center shrink-0"><i className="fas fa-exclamation-triangle" /></div>
+                                <div>
+                                    <div className="text-[12px] font-semibold text-[#0f172a]">Kritik Stok Uyarısı</div>
+                                    <div className="text-[11px] text-[#64748b] mt-0.5"><span className="font-bold text-[#dc2626]">{kritikStokSayisi}</span> ürün kritik stok seviyesinin altında</div>
+                                </div>
+                            </div>
+                            <Link href="/stok" className="btn-primary flex items-center gap-2" style={{ background: "#dc2626" }}><i className="fas fa-box text-[10px]" /> STOKLARI İNCELE</Link>
+                        </div>
+                    </div>
+                )}
+
+                {(vadesiYaklasanCek > 0 || vadesiGecmisCek > 0) && (
+                    <div className="card-kurumsal" style={{ borderLeft: `3px solid ${vadesiGecmisCek > 0 ? "#dc2626" : "#f59e0b"}` }}>
+                        <div className="flex items-center justify-between px-5 py-3">
+                            <div className="flex items-center gap-4">
+                                <div className={`w-10 h-10 flex items-center justify-center shrink-0 ${vadesiGecmisCek > 0 ? "bg-[#fef2f2] text-[#dc2626]" : "bg-amber-50 text-amber-500"}`}><i className="fas fa-money-check" /></div>
+                                <div>
+                                    <div className="text-[12px] font-semibold text-[#0f172a]">Çek / Senet Vade Uyarısı</div>
+                                    <div className="text-[11px] text-[#64748b] mt-0.5">
+                                        {vadesiGecmisCek > 0 && <><span className="font-bold text-[#dc2626]">{vadesiGecmisCek}</span> adet vadesi geçmiş</>}
+                                        {vadesiGecmisCek > 0 && vadesiYaklasanCek > 0 && " · "}
+                                        {vadesiYaklasanCek > 0 && <><span className="font-bold text-[#f59e0b]">{vadesiYaklasanCek}</span> adet vadesi yaklaşan</>}
+                                    </div>
+                                </div>
+                            </div>
+                            <Link href="/cek-senet" className="btn-primary flex items-center gap-2" style={{ background: vadesiGecmisCek > 0 ? "#dc2626" : "#f59e0b" }}><i className="fas fa-eye text-[10px]" /> İNCELE</Link>
+                        </div>
+                    </div>
+                )}
+
+                {/* HEDEF TAKİBİ */}
+                {(hedefCiro > 0 || hedefSiparis > 0 || hedefYeniMusteri > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[
+                            { label: "Aylık Ciro Hedefi", hedef: hedefCiro, gercek: gercekCiro, renk: "#059669", format: (v: number) => `₺${fmtTL(v)}` },
+                            { label: "Aylık Sipariş Hedefi", hedef: hedefSiparis, gercek: gercekSiparis, renk: "#3b82f6", format: (v: number) => `${v} adet` },
+                            { label: "Yeni Müşteri Hedefi", hedef: hedefYeniMusteri, gercek: gercekYeniMusteri, renk: "#7c3aed", format: (v: number) => `${v} müşteri` },
+                        ].filter(h => h.hedef > 0).map((h, i) => {
+                            const yuzde = h.hedef > 0 ? Math.min(Math.round((h.gercek / h.hedef) * 100), 100) : 0;
+                            const asild = h.gercek >= h.hedef;
+                            const kalan = h.hedef - h.gercek;
+                            return (
+                                <div key={i} className="card-kurumsal p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-[10px] font-semibold text-[#64748b] uppercase tracking-widest">{h.label}</div>
+                                        <span className={`text-[11px] font-bold ${asild ? "text-[#059669]" : "text-[#0f172a]"}`}>{yuzde}%</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-[#f1f5f9] mb-2">
+                                        <div className="h-full transition-all duration-500" style={{ width: `${yuzde}%`, background: h.renk }} />
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[11px] font-semibold" style={{ color: h.renk }}>{h.format(h.gercek)}</span>
+                                        <span className="text-[10px] text-[#94a3b8]">/ {h.format(h.hedef)}</span>
+                                    </div>
+                                    <div className={`text-[9px] font-semibold mt-1 ${asild ? "text-[#059669]" : "text-[#f59e0b]"}`}>
+                                        {asild ? "Hedef aşıldı!" : `Hedefe ${h.label.includes("Ciro") ? `₺${fmtTL(kalan)}` : `${kalan}`} kaldı`}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {(hedefCiro === 0 && hedefSiparis === 0 && hedefYeniMusteri === 0) && (
+                    <div className="card-kurumsal p-4 flex items-center justify-between">
+                        <div>
+                            <div className="text-[12px] font-semibold text-[#0f172a]">Aylık Hedef Belirleyin</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5">Ciro, sipariş ve yeni müşteri hedeflerinizi belirleyerek performansınızı takip edin</div>
+                        </div>
+                        <button onClick={() => setHedefModalAcik(true)} className="btn-primary text-[11px] flex items-center gap-1.5">
+                            <i className="fas fa-bullseye text-[9px]" /> Hedef Belirle
+                        </button>
+                    </div>
+                )}
+
+                {(hedefCiro > 0 || hedefSiparis > 0 || hedefYeniMusteri > 0) && (
+                    <div className="flex justify-end -mt-3">
+                        <button onClick={() => setHedefModalAcik(true)} className="text-[10px] font-semibold text-[#3b82f6] hover:text-[#1d4ed8] uppercase tracking-wider">
+                            <i className="fas fa-pen mr-1 text-[8px]" /> Hedefleri Düzenle
+                        </button>
                     </div>
                 )}
 
@@ -245,6 +401,62 @@ export default function AnaSayfa() {
                     </div>
                 </div>
             </div>
+
+            {/* HEDEF BELİRLE MODALI */}
+            {hedefModalAcik && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setHedefModalAcik(false)}>
+                    <div className="bg-white w-full max-w-md" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]"><i className="fas fa-bullseye mr-2 text-[#3b82f6]" />Bu Ay İçin Hedef Belirle</div>
+                            <button onClick={() => setHedefModalAcik(false)} className="text-[#94a3b8] hover:text-[#0f172a]"><i className="fas fa-times" /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="text-[10px] font-semibold text-[#059669] uppercase tracking-wider mb-1 block">Aylık Ciro Hedefi (TL)</label>
+                                <input type="number" value={hFormCiro} onChange={e => setHFormCiro(e.target.value)} className="input-kurumsal w-full text-[14px] font-semibold" placeholder="Örn: 100000" min="0" step="1000" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-semibold text-[#3b82f6] uppercase tracking-wider mb-1 block">Aylık Sipariş Hedefi (Adet)</label>
+                                <input type="number" value={hFormSiparis} onChange={e => setHFormSiparis(e.target.value)} className="input-kurumsal w-full text-[14px] font-semibold" placeholder="Örn: 50" min="0" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-semibold text-[#7c3aed] uppercase tracking-wider mb-1 block">Yeni Müşteri Hedefi (Adet)</label>
+                                <input type="number" value={hFormMusteri} onChange={e => setHFormMusteri(e.target.value)} className="input-kurumsal w-full text-[14px] font-semibold" placeholder="Örn: 10" min="0" />
+                            </div>
+                        </div>
+                        <div className="px-5 py-3 flex items-center justify-end gap-2" style={{ borderTop: "1px solid var(--c-border)" }}>
+                            <button onClick={() => setHedefModalAcik(false)} className="btn-secondary text-[11px]">İptal</button>
+                            <button disabled={hedefKaydediliyor} onClick={async () => {
+                                if (!aktifSirket) return;
+                                setHedefKaydediliyor(true);
+                                const simdi = new Date();
+                                const payload = {
+                                    sirket_id: aktifSirket.id,
+                                    yil: simdi.getFullYear(),
+                                    ay: simdi.getMonth() + 1,
+                                    hedef_ciro: Number(hFormCiro) || 0,
+                                    hedef_siparis_sayisi: Number(hFormSiparis) || 0,
+                                    hedef_yeni_musteri: Number(hFormMusteri) || 0,
+                                };
+                                const { data: existing } = await supabase.from("satis_hedefleri").select("id").eq("sirket_id", aktifSirket.id).eq("yil", payload.yil).eq("ay", payload.ay).single();
+                                if (existing) {
+                                    await supabase.from("satis_hedefleri").update(payload).eq("id", existing.id);
+                                } else {
+                                    await supabase.from("satis_hedefleri").insert(payload);
+                                }
+                                setHedefCiro(payload.hedef_ciro);
+                                setHedefSiparis(payload.hedef_siparis_sayisi);
+                                setHedefYeniMusteri(payload.hedef_yeni_musteri);
+                                setHedefModalAcik(false);
+                                setHedefKaydediliyor(false);
+                            }} className="btn-primary text-[11px] flex items-center gap-1.5">
+                                {hedefKaydediliyor ? <i className="fas fa-circle-notch fa-spin text-[10px]" /> : <i className="fas fa-save text-[10px]" />}
+                                Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }

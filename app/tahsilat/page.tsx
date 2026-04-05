@@ -84,8 +84,8 @@ export default function TahsilatErpSayfasi() {
             const resF = await supabase.from("firmalar").select("id, unvan, bakiye").eq("sahip_sirket_id", sirketId);
             const firmalar: CariOzet[] = (resF.data || []).map((f: FirmaRow) => ({ id: `F-${f.id}`, gercekId: Number(f.id), tip: 'firma', isim: String(f.unvan || ""), bakiye: parseTutarToFloat(f.bakiye) }));
 
-            const resC = await supabase.from("cari_kartlar").select("id, cari_adi, bakiye, borc_bakiye, alacak_bakiye").or(`sahip_sirket_id.eq.${sirketId},sirket_id.eq.${sirketId}`);
-            const cariKartlar: CariOzet[] = (resC.data || []).map((c: CariKartRow) => ({ id: `C-${c.id}`, gercekId: Number(c.id), tip: 'cari', isim: String(c.cari_adi || ""), bakiye: c.bakiye ? parseTutarToFloat(c.bakiye) : (parseTutarToFloat(c.borc_bakiye) - parseTutarToFloat(c.alacak_bakiye)) }));
+            const resC = await supabase.from("firmalar").select("id, unvan, bakiye").eq("sahip_sirket_id", sirketId).eq("firma_tipi", "Bireysel");
+            const cariKartlar: CariOzet[] = (resC.data || []).map((c: FirmaRow) => ({ id: `C-${c.id}`, gercekId: Number(c.id), tip: 'cari', isim: String(c.unvan || ""), bakiye: parseTutarToFloat(c.bakiye) }));
 
             setCariler([...firmalar, ...cariKartlar].sort((a,b) => a.isim.localeCompare(b.isim)));
 
@@ -173,7 +173,7 @@ export default function TahsilatErpSayfasi() {
             if (seciliGercekCari.tip === 'firma') {
                 await supabase.from("firmalar").update({ bakiye: yeniBakiye }).eq("id", seciliGercekCari.gercekId);
             } else {
-                await supabase.from("cari_kartlar").update({ bakiye: yeniBakiye }).eq("id", seciliGercekCari.gercekId);
+                await supabase.from("firmalar").update({ bakiye: yeniBakiye }).eq("id", seciliGercekCari.gercekId);
             }
 
             toast.success("Evrak başarıyla kaydedildi!");

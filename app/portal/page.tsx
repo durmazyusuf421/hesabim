@@ -71,6 +71,8 @@ export default function MusteriPortali() {
   const [whatsappModal, setWhatsappModal] = useState<{ linkler: { toptanciAdi: string; url: string }[] } | null>(null);
   // Onay bekleyen sipariş sayısı
   const [onayBekleyenSayisi, setOnayBekleyenSayisi] = useState(0);
+  const [ozelFiyatMap, setOzelFiyatMap] = useState<Record<string, number>>({});
+  const [dovizKurlari, setDovizKurlari] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!aktifMusteri) return;
@@ -91,6 +93,20 @@ export default function MusteriPortali() {
     if (onaylilar.length > 0) {
         const { data: urunData } = await supabase.from("urunler").select("*").in("sahip_sirket_id", onaylilar).neq("aktif", false).order('urun_adi');
         setTumUrunler(urunData || []);
+        // Özel fiyatları çek - her toptancıdaki bu markete ait cari kartını bul
+        const { data: cariKartlarFiyat } = await supabase.from("firmalar").select("id, sahip_sirket_id").eq("bagli_sirket_id", aktifMusteri.id);
+        if (cariKartlarFiyat && cariKartlarFiyat.length > 0) {
+            const cariIds = cariKartlarFiyat.map(c => c.id);
+            const { data: ofData } = await supabase.from("ozel_fiyatlar").select("urun_id, ozel_fiyat, firma_id").in("firma_id", cariIds).eq("aktif", true);
+            const map: Record<string, number> = {};
+            (ofData || []).forEach(of => { map[`${of.urun_id}`] = Number(of.ozel_fiyat); });
+            setOzelFiyatMap(map);
+        }
+        // Döviz kurlarını çek
+        const { data: kurData } = await supabase.from("doviz_kurlari").select("doviz_turu, kur").order("tarih", { ascending: false }).limit(10);
+        const kurMap: Record<string, number> = {};
+        (kurData || []).forEach(k => { if (!kurMap[k.doviz_turu]) kurMap[k.doviz_turu] = Number(k.kur); });
+        setDovizKurlari(kurMap);
     } else {
         setTumUrunler([]);
     }
@@ -267,7 +283,8 @@ export default function MusteriPortali() {
           )}
 
           <div className="flex-1 overflow-auto relative">
-              <table className="tbl-kurumsal">
+            <div className="overflow-x-auto">
+              <table className="tbl-kurumsal min-w-[800px]">
                   <thead>
                       <tr>
                           <th className="w-8 text-center"><i className="fas fa-caret-down"></i></th>
@@ -292,7 +309,10 @@ export default function MusteriPortali() {
 
                               const aktifBirimNo = aktifBirimler[u.id] !== undefined ? aktifBirimler[u.id] : -1;
                               const gecerliBirim = (aktifBirimNo === -1 || !u.alt_birimler || !u.alt_birimler[aktifBirimNo]) ? u.birim : u.alt_birimler[aktifBirimNo].birim;
-                              const gecerliFiyat = (aktifBirimNo === -1 || !u.alt_birimler || !u.alt_birimler[aktifBirimNo]) ? u.satis_fiyati : u.alt_birimler[aktifBirimNo].fiyat;
+                              const ozelFiyatVar = aktifBirimNo === -1 && ozelFiyatMap[`${u.id}`];
+                              const urunDoviz = (u as unknown as { doviz_turu?: string; doviz_fiyati?: number });
+                              const dovizliMi = !ozelFiyatVar && aktifBirimNo === -1 && urunDoviz.doviz_turu && urunDoviz.doviz_turu !== "TRY" && Number(urunDoviz.doviz_fiyati) > 0 && dovizKurlari[urunDoviz.doviz_turu];
+                              const gecerliFiyat = ozelFiyatVar ? ozelFiyatMap[`${u.id}`] : (dovizliMi ? Math.round(Number(urunDoviz.doviz_fiyati) * dovizKurlari[urunDoviz.doviz_turu!] * 100) / 100 : ((aktifBirimNo === -1 || !u.alt_birimler || !u.alt_birimler[aktifBirimNo]) ? u.satis_fiyati : u.alt_birimler[aktifBirimNo].fiyat));
 
                               const sepettekiUrun = sepet.find(s => s.id === u.id && s.secilen_birim === gecerliBirim);
                               const miktar = sepettekiUrun ? sepettekiUrun.miktar : 0;
@@ -324,7 +344,11 @@ export default function MusteriPortali() {
                                       </td>
 
                                       <td className="text-right font-semibold text-[#1d4ed8]">
-                                          {Number(gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
+                                          <div className="flex items-center justify-end gap-1.5">
+                                              {ozelFiyatVar && <span className="bg-emerald-50 text-[#059669] border border-emerald-200 text-[7px] font-bold px-1 py-0 shrink-0">Size Özel</span>}
+                                              {dovizliMi && <span className="bg-blue-50 text-blue-600 border border-blue-200 text-[7px] font-bold px-1 py-0 shrink-0">{urunDoviz.doviz_turu}</span>}
+                                              {Number(gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
+                                          </div>
                                       </td>
 
                                       <td className="p-0">
@@ -348,6 +372,7 @@ export default function MusteriPortali() {
                       )}
                   </tbody>
               </table>
+            </div>
           </div>
           <div className="h-8 flex items-center justify-between px-4 text-[10px] font-semibold shrink-0" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)", color: "var(--c-text-muted)" }}>
               <span>Listelenen Ürün: {gosterilenUrunler.length}</span>

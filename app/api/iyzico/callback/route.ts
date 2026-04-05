@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Bakiyeyi düş
-    const table = cariTip === "firma" ? "firmalar" : "cari_kartlar";
+    const table = "firmalar";
     const { data: current } = await supabaseAdmin.from(table).select("bakiye").eq("id", gercekId).single();
     const mevcutBakiye = current?.bakiye ? parseFloat(String(current.bakiye)) : 0;
     const yeniBakiye = mevcutBakiye - tutar;

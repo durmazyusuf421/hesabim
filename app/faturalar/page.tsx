@@ -56,7 +56,6 @@ export default function FaturaMerkezi() {
 
   useEffect(() => {
     if (!aktifSirket) return;
-    if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("MUHASEBE")) {
         verileriGetir(aktifSirket.id);

@@ -4,6 +4,7 @@ import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
 import Link from "next/link";
+import { pdfExport } from "@/app/lib/export";
 interface FirmaOzet { id: number; unvan: string; bakiye?: number; }
 interface CariHareket {
     id: number;
@@ -38,7 +39,6 @@ export default function CariEkstre() {
 
   useEffect(() => {
     if (!aktifSirket) return;
-    if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("MUHASEBE")) {
         firmalariGetir(aktifSirket.id);
@@ -167,6 +167,7 @@ export default function CariEkstre() {
                         <Link href="/tahsilat" className="btn-primary flex items-center gap-2" style={{ background: "#059669" }}><i className="fas fa-money-bill-wave text-[10px]" /> TAHSİLAT</Link>
                         <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 hidden sm:flex"><i className="fas fa-print text-[10px]" /> YAZDIR</button>
                         <button onClick={excelExport} disabled={filtrelenmisHareketler.length === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40 hidden sm:flex"><i className="fas fa-file-excel text-[#059669] text-[10px]" /> EXCEL</button>
+                        <button onClick={() => { if (filtrelenmisHareketler.length === 0) return; const cols = [{header:"Tarih",key:"tarih",width:12},{header:"Evrak No",key:"evrak_no",width:15},{header:"İşlem Tipi",key:"islem_tipi",width:15},{header:"Açıklama",key:"aciklama",width:25},{header:"Borç",key:"borc",width:12},{header:"Alacak",key:"alacak",width:12}]; const d = filtrelenmisHareketler.map(h => ({...h, tarih: new Date(h.tarih).toLocaleDateString("tr-TR")})); pdfExport(d as unknown as Record<string,unknown>[], cols, "cari_ekstre", `Cari Ekstre - ${firmalar.find(f => f.id === Number(seciliFirmaId))?.unvan || ""}`); }} disabled={filtrelenmisHareketler.length === 0} className="btn-secondary flex items-center gap-2 disabled:opacity-40 hidden sm:flex"><i className="fas fa-file-pdf text-[#dc2626] text-[10px]" /> PDF</button>
                         {(aramaTerimi || baslangicTarih || bitisTarih) && (
                             <button onClick={filtreTemizle} className="btn-secondary flex items-center gap-2 text-[#dc2626]"><i className="fas fa-times text-[10px]" /> TEMİZLE</button>
                         )}

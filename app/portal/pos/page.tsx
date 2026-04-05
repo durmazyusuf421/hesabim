@@ -58,12 +58,18 @@ export default function PosEkrani() {
   };
 
   const parktanYukle = (idx: number) => {
-      if (sepet.length > 0 && !window.confirm("Mevcut sepet temizlenecek. Devam etmek istiyor musunuz?")) return;
-      const park = parklar[idx];
-      setSepet(park.sepet);
-      const yeniParklar = parklar.filter((_, i) => i !== idx);
-      parklariKaydet(yeniParklar);
-      setParkModalAcik(false);
+      const yukle = () => {
+          const park = parklar[idx];
+          setSepet(park.sepet);
+          const yeniParklar = parklar.filter((_, i) => i !== idx);
+          parklariKaydet(yeniParklar);
+          setParkModalAcik(false);
+      };
+      if (sepet.length > 0) {
+          onayla({ baslik: "Sepet Temizlenecek", mesaj: "Mevcut sepet temizlenecek. Devam etmek istiyor musunuz?", onayMetni: "Devam", tehlikeli: false, onOnayla: yukle });
+          return;
+      }
+      yukle();
       toast.success("Park edilmiş sepet yüklendi!");
       barkodInputRef.current?.focus();
   };
@@ -101,20 +107,33 @@ export default function PosEkrani() {
       }
   };
 
+  const [kritikStokUyari, setKritikStokUyari] = useState<string | null>(null);
+
   const sepeteEkle = (urun: any) => {
       const varOlan = sepet.find(item => item.urun_id === urun.id);
+      const yeniMiktar = varOlan ? varOlan.miktar + 1 : 1;
+      const kalanStok = Number(urun.stok_miktari) - yeniMiktar;
+      const minStok = Number(urun.min_stok_miktari || 0);
+
       if (varOlan) {
           setSepet(sepet.map(item => item.urun_id === urun.id ? { ...item, miktar: item.miktar + 1, fiyat: Number(urun.satis_fiyati) } : item));
       } else {
-          setSepet([{ 
-              urun_id: urun.id, 
-              ad: urun.urun_adi, 
-              barkod: urun.barkod || urun.id.toString().padStart(5,'0'), 
-              miktar: 1, 
-              fiyat: Number(urun.satis_fiyati), 
+          setSepet([{
+              urun_id: urun.id,
+              ad: urun.urun_adi,
+              barkod: urun.barkod || urun.id.toString().padStart(5,'0'),
+              miktar: 1,
+              fiyat: Number(urun.satis_fiyati),
               stok: Number(urun.stok_miktari)
           }, ...sepet]);
       }
+
+      // Kritik stok uyarısı
+      if (minStok > 0 && kalanStok <= minStok) {
+          setKritikStokUyari(`${urun.urun_adi} stoğu kritik seviyeye düştü! (Kalan: ${kalanStok})`);
+          setTimeout(() => setKritikStokUyari(null), 4000);
+      }
+
       // Manuel arama modalı açıksa kapatıp barkoda odaklanalım
       if(aramaModalAcik) {
           setAramaModalAcik(false);
@@ -210,6 +229,13 @@ export default function PosEkrani() {
   return (
     <>
       <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
+        {kritikStokUyari && (
+            <div className="mx-2 md:mx-4 mt-2 flex items-center gap-3 px-4 py-2.5 bg-amber-50 border border-amber-300 animate-pulse" style={{ zIndex: 20 }}>
+                <i className="fas fa-exclamation-triangle text-amber-500 text-lg"></i>
+                <span className="text-[12px] font-bold text-amber-800">{kritikStokUyari}</span>
+                <button onClick={() => setKritikStokUyari(null)} className="ml-auto text-amber-500 hover:text-amber-700"><i className="fas fa-times"></i></button>
+            </div>
+        )}
         <div className="flex-1 flex flex-col md:flex-row gap-4 p-2 md:p-4 overflow-auto md:overflow-hidden select-none">
 
           {/* SÜTUN 1: SEPET (SATIŞ FİŞİ) - MODERN & OKUNAKLI */}

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
-interface UrunOzet { id: number; urun_adi: string; stok_miktari: number; birim: string; }
+interface UrunOzet { id: number; urun_adi: string; stok_miktari: number; birim: string; lot_takibi?: boolean; seri_takibi?: boolean; }
 interface StokHareketi {
     id: number; tarih: string; islem_tipi: string; miktar: number; aciklama: string;
     islem_yapan: string; urunler: { urun_adi: string; birim: string; }
@@ -21,21 +21,25 @@ export default function StokHareketleri() {
   const [yukleniyor, setYukleniyor] = useState(true);
   // YENİ HAREKET MODAL STATE
   const [modalAcik, setModalAcik] = useState(false);
-  const [islemForm, setIslemForm] = useState({ urun_id: "", islem_tipi: "GIRIS", miktar: 1, aciklama: "" });
+  const [islemForm, setIslemForm] = useState({ urun_id: "", islem_tipi: "GIRIS", miktar: 1, aciklama: "", depo_id: "", lot_no: "", seri_no: "", uretim_tarihi: "", son_kullanma_tarihi: "", tedarikci: "" });
+  const [depolarList, setDepolarList] = useState<{id:number;depo_adi:string}[]>([]);
 
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
-      const { data: uData } = await supabase.from("urunler").select("id, urun_adi, stok_miktari, birim").eq("sahip_sirket_id", sirketId).order('urun_adi');
+      const { data: uData } = await supabase.from("urunler").select("id, urun_adi, stok_miktari, birim, lot_takibi, seri_takibi").eq("sahip_sirket_id", sirketId).order('urun_adi');
       setUrunler(uData || []);
 
-      const { data: hData } = await supabase.from("stok_hareketleri").select("*, urunler(urun_adi, birim)").eq("sirket_id", sirketId).order('tarih', { ascending: false }).order('id', { ascending: false });
+      const [{ data: hData }, { data: depoData }] = await Promise.all([
+          supabase.from("stok_hareketleri").select("*, urunler(urun_adi, birim)").eq("sirket_id", sirketId).order('tarih', { ascending: false }).order('id', { ascending: false }),
+          supabase.from("depolar").select("id, depo_adi").eq("sirket_id", sirketId).eq("aktif", true).order("depo_adi"),
+      ]);
       setHareketler((hData as StokHareketi[]) || []);
+      setDepolarList(depoData || []);
       setYukleniyor(false);
   }
 
   useEffect(() => {
     if (!aktifSirket) return;
-    if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
     setAktifKullaniciAdi(kullanici?.ad_soyad || "Bilinmeyen Kullanıcı");
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("DEPOCU")) {
@@ -46,7 +50,7 @@ export default function StokHareketleri() {
   }, [aktifSirket, kullanici, kullaniciRol]);
 
   const yeniIslemBaslat = () => {
-      setIslemForm({ urun_id: "", islem_tipi: "GIRIS", miktar: 1, aciklama: "" });
+      setIslemForm({ urun_id: "", islem_tipi: "GIRIS", miktar: 1, aciklama: "", depo_id: "", lot_no: "", seri_no: "", uretim_tarihi: "", son_kullanma_tarihi: "", tedarikci: "" });
       setModalAcik(true);
   };
 
@@ -74,6 +78,39 @@ export default function StokHareketleri() {
       else if (islemForm.islem_tipi === "SAYIM") yeniMiktar = Number(islemForm.miktar);
 
       await supabase.from("urunler").update({ stok_miktari: yeniMiktar }).eq("id", seciliUrun.id);
+
+      // Depo stok güncelle
+      if (islemForm.depo_id) {
+          const depoId = Number(islemForm.depo_id);
+          const urunId = Number(islemForm.urun_id);
+          const { data: mevcutDS } = await supabase.from("depo_stok").select("miktar").eq("depo_id", depoId).eq("urun_id", urunId).single();
+          let depoMiktar = mevcutDS ? Number(mevcutDS.miktar) : 0;
+          if (islemForm.islem_tipi === "GIRIS") depoMiktar += Number(islemForm.miktar);
+          else if (islemForm.islem_tipi === "CIKIS" || islemForm.islem_tipi === "FIRE") depoMiktar = Math.max(0, depoMiktar - Number(islemForm.miktar));
+          else if (islemForm.islem_tipi === "SAYIM") depoMiktar = Number(islemForm.miktar);
+          if (mevcutDS) {
+              await supabase.from("depo_stok").update({ miktar: depoMiktar, updated_at: new Date().toISOString() }).eq("depo_id", depoId).eq("urun_id", urunId);
+          } else {
+              await supabase.from("depo_stok").insert({ depo_id: depoId, urun_id: urunId, miktar: depoMiktar });
+          }
+      }
+
+      // Lot/Seri hareketi kaydet
+      const secUrun = urunler.find(u => u.id.toString() === islemForm.urun_id);
+      if (secUrun && (secUrun.lot_takibi || secUrun.seri_takibi) && (islemForm.lot_no || islemForm.seri_no)) {
+          await supabase.from("lot_seri_hareketleri").insert({
+              sirket_id: aktifSirket?.id,
+              urun_id: Number(islemForm.urun_id),
+              lot_no: islemForm.lot_no || null,
+              seri_no: islemForm.seri_no || null,
+              miktar: islemForm.miktar,
+              islem_tipi: islemForm.islem_tipi === "GIRIS" ? "GIRIS" : "CIKIS",
+              uretim_tarihi: islemForm.uretim_tarihi || null,
+              son_kullanma_tarihi: islemForm.son_kullanma_tarihi || null,
+              tedarikci: islemForm.tedarikci || null,
+              aciklama: islemForm.aciklama || null,
+          });
+      }
 
       setModalAcik(false);
       if (aktifSirket) verileriGetir(aktifSirket.id);
@@ -187,6 +224,50 @@ export default function StokHareketleri() {
                         <input type="number" min="1" value={islemForm.miktar} onChange={(e) => setIslemForm({...islemForm, miktar: Number(e.target.value)})} className="input-kurumsal w-full text-center" />
                     </div>
                 </div>
+
+                {depolarList.length > 0 && (
+                    <div>
+                        <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Depo</label>
+                        <select value={islemForm.depo_id} onChange={(e) => setIslemForm({...islemForm, depo_id: e.target.value})} className="input-kurumsal w-full cursor-pointer">
+                            <option value="">-- Depo Seçiniz (İsteğe Bağlı) --</option>
+                            {depolarList.map(d => <option key={d.id} value={d.id}>{d.depo_adi}</option>)}
+                        </select>
+                    </div>
+                )}
+                {/* LOT/SERİ ALANLARI */}
+                {(() => { const su = urunler.find(u => u.id.toString() === islemForm.urun_id); return su && (su.lot_takibi || su.seri_takibi); })() && (
+                    <div className="p-3 space-y-3 border border-cyan-200" style={{ background: "#ecfeff" }}>
+                        <div className="text-[9px] font-bold text-cyan-700 uppercase tracking-wider"><i className="fas fa-barcode mr-1" /> Lot / Seri Bilgileri</div>
+                        <div className="grid grid-cols-2 gap-3">
+                            {urunler.find(u => u.id.toString() === islemForm.urun_id)?.lot_takibi && (
+                                <div>
+                                    <label className="text-[9px] font-semibold text-cyan-600 uppercase tracking-widest block mb-1">Lot No</label>
+                                    <input type="text" value={islemForm.lot_no} onChange={e => setIslemForm({...islemForm, lot_no: e.target.value})} className="input-kurumsal w-full font-mono" placeholder="LOT-001" />
+                                </div>
+                            )}
+                            {urunler.find(u => u.id.toString() === islemForm.urun_id)?.seri_takibi && (
+                                <div>
+                                    <label className="text-[9px] font-semibold text-violet-600 uppercase tracking-widest block mb-1">Seri No</label>
+                                    <input type="text" value={islemForm.seri_no} onChange={e => setIslemForm({...islemForm, seri_no: e.target.value})} className="input-kurumsal w-full font-mono" placeholder="SN-00001" />
+                                </div>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <label className="text-[9px] font-semibold text-cyan-600 uppercase tracking-widest block mb-1">Üretim Tarihi</label>
+                                <input type="date" value={islemForm.uretim_tarihi} onChange={e => setIslemForm({...islemForm, uretim_tarihi: e.target.value})} className="input-kurumsal w-full" />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-semibold text-cyan-600 uppercase tracking-widest block mb-1">Son Kullanma</label>
+                                <input type="date" value={islemForm.son_kullanma_tarihi} onChange={e => setIslemForm({...islemForm, son_kullanma_tarihi: e.target.value})} className="input-kurumsal w-full" />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-semibold text-cyan-600 uppercase tracking-widest block mb-1">Tedarikçi</label>
+                                <input type="text" value={islemForm.tedarikci} onChange={e => setIslemForm({...islemForm, tedarikci: e.target.value})} className="input-kurumsal w-full" placeholder="Firma adı" />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div>
                     <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1.5 pl-1">Açıklama / Not</label>

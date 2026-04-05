@@ -4,6 +4,8 @@ import { supabase, siparisNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
+import { bildirimEkle } from "@/app/lib/bildirim";
+import { excelExport, pdfExport } from "@/app/lib/export";
 interface Siparis {
     id: number;
     siparis_no: string;
@@ -39,6 +41,8 @@ export default function SiparislerSayfasi() {
     const [aramaTerimi, setAramaTerimi] = useState("");
     const [yukleniyor, setYukleniyor] = useState(true);
 const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
+    const [seciliSiparisler, setSeciliSiparisler] = useState<Set<number>>(new Set());
+    const [sipExportMenu, setSipExportMenu] = useState(false);
 
     // --- DETAY MODAL & İŞLEM MENÜSÜ STATELERİ ---
     const [detayModalAcik, setDetayModalAcik] = useState(false);
@@ -53,6 +57,18 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     const [seciliCariId, setSeciliCariId] = useState<string>("");
     const [siparisKalemleri, setSiparisKalemleri] = useState<YeniKalem[]>([{ urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0 }]);
     const [kaydediliyor, setKaydediliyor] = useState(false);
+    const [ozelFiyatMap, setOzelFiyatMap] = useState<Record<number, number>>({});
+    const [plasiyerler, setPlasiyerler] = useState<{id:number;ad_soyad:string}[]>([]);
+    const [seciliPlasiyerId, setSeciliPlasiyerId] = useState<string>("");
+    const [dovizKurlari, setDovizKurlari] = useState<Record<string, number>>({});
+    // --- ŞABLON STATELERİ ---
+    const [sablonModalAcik, setSablonModalAcik] = useState(false);
+    const [sablonlar, setSablonlar] = useState<{id:number;sablon_adi:string;firma_id:number|null;kalem_sayisi?:number}[]>([]);
+    const [sablonYukleniyor, setSablonYukleniyor] = useState(false);
+    const [sablonKaydetAdi, setSablonKaydetAdi] = useState("");
+    const [sablonKaydetModalAcik, setSablonKaydetModalAcik] = useState(false);
+    const [sablonKaydediliyor, setSablonKaydediliyor] = useState(false);
+
     const [yazdirilacakFis, setYazdirilacakFis] = useState<{siparis: Siparis; kalemler: DetayKalem[]} | null>(null);
     const [yazdirilacakIrsaliye, setYazdirilacakIrsaliye] = useState<{siparis: Siparis; kalemler: DetayKalem[]} | null>(null);
 
@@ -73,8 +89,17 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                 setFirmalar(firmalarData);
             }
 
-            const { data: urunData } = await supabase.from("urunler").select("id, urun_adi, satis_fiyati, birim, barkod").eq("sahip_sirket_id", sirketId).order('urun_adi');
+            const [{ data: urunData }, { data: plasiyerData }] = await Promise.all([
+                supabase.from("urunler").select("id, urun_adi, satis_fiyati, birim, barkod").eq("sahip_sirket_id", sirketId).order('urun_adi'),
+                supabase.from("alt_kullanicilar").select("id, ad_soyad").eq("sirket_id", sirketId).eq("plasiyer", true).order('ad_soyad'),
+            ]);
             if (urunData) setUrunler(urunData);
+            setPlasiyerler(plasiyerData || []);
+            // Döviz kurları
+            const { data: kurData } = await supabase.from("doviz_kurlari").select("doviz_turu, kur").order("tarih", { ascending: false }).limit(10);
+            const kurMap: Record<string, number> = {};
+            (kurData || []).forEach(k => { if (!kurMap[k.doviz_turu]) kurMap[k.doviz_turu] = Number(k.kur); });
+            setDovizKurlari(kurMap);
 
             // Siparişleri çek
             const { data } = await supabase.from("siparisler").select("*").eq("satici_sirket_id", sirketId).order('id', { ascending: false });
@@ -102,9 +127,21 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
         }
     }, [aktifSirket, kullaniciRol]);
 
+    // Özel fiyatları çek
+    useEffect(() => {
+        if (!aktifSirket || !seciliCariId) { setOzelFiyatMap({}); return; }
+        supabase.from("ozel_fiyatlar").select("urun_id, ozel_fiyat").eq("sirket_id", aktifSirket.id).eq("firma_id", Number(seciliCariId)).eq("aktif", true)
+            .then(({ data }) => {
+                const map: Record<number, number> = {};
+                (data || []).forEach(of => { map[of.urun_id] = Number(of.ozel_fiyat); });
+                setOzelFiyatMap(map);
+            });
+    }, [aktifSirket, seciliCariId]);
+
     // --- YENİ SİPARİŞ FONKSİYONLARI ---
     const yeniSiparisAc = () => {
         setSeciliCariId("");
+        setSeciliPlasiyerId("");
         setSiparisKalemleri([{ urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0 }]);
         setYeniModalAcik(true);
     };
@@ -123,15 +160,128 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     };
 
     const urunSec = (index: number, urunId: string) => {
-        const urun = urunler.find(u => u.id.toString() === urunId);
+        const urun = urunler.find(u => u.id.toString() === urunId) as (typeof urunler[0] & { doviz_turu?: string; doviz_fiyati?: number }) | undefined;
         if (urun) {
+            const ozelFiyat = ozelFiyatMap[urun.id];
+            let fiyat = ozelFiyat || parseTutar(urun.satis_fiyati);
+            // Dövizli ürünse TL'ye çevir
+            if (!ozelFiyat && urun.doviz_turu && urun.doviz_turu !== "TRY" && Number(urun.doviz_fiyati) > 0 && dovizKurlari[urun.doviz_turu]) {
+                fiyat = Number(urun.doviz_fiyati) * dovizKurlari[urun.doviz_turu];
+            }
             setSiparisKalemleri(siparisKalemleri.map((k, i) => i === index ? {
-                ...k, urun_adi: urun.urun_adi, birim: urun.birim || "Adet", birim_fiyat: parseTutar(urun.satis_fiyati)
+                ...k, urun_adi: urun.urun_adi, birim: urun.birim || "Adet", birim_fiyat: Math.round(fiyat * 100) / 100
             } : k));
         }
     };
 
     const kalemToplamHesapla = () => siparisKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
+
+    // Kampanya indirimi hesapla
+    const [aktifKampanyalar, setAktifKampanyalar] = useState<{id:number;kampanya_adi:string;indirim_tipi:string;indirim_degeri:number;min_siparis_tutari:number}[]>([]);
+    useEffect(() => {
+        if (!aktifSirket) return;
+        const bugun = new Date().toISOString().split("T")[0];
+        supabase.from("kampanyalar").select("id,kampanya_adi,indirim_tipi,indirim_degeri,min_siparis_tutari").eq("sirket_id", aktifSirket.id).eq("aktif", true).lte("baslangic_tarihi", bugun).gte("bitis_tarihi", bugun).then(({ data }) => setAktifKampanyalar(data || []));
+    }, [aktifSirket]);
+
+    const kampanyaIndirimi = () => {
+        const toplam = kalemToplamHesapla();
+        let enIyiIndirim = 0;
+        let enIyiKampanya = "";
+        aktifKampanyalar.forEach(k => {
+            if (toplam < (Number(k.min_siparis_tutari) || 0)) return;
+            const indirim = k.indirim_tipi === "YUZDE" ? toplam * (k.indirim_degeri / 100) : Number(k.indirim_degeri);
+            if (indirim > enIyiIndirim) { enIyiIndirim = indirim; enIyiKampanya = k.kampanya_adi; }
+        });
+        return { indirim: enIyiIndirim, kampanyaAdi: enIyiKampanya };
+    };
+
+    // --- ŞABLON FONKSİYONLARI ---
+    const sablonlariGetir = async () => {
+        if (!aktifSirket) return;
+        setSablonYukleniyor(true);
+        const { data } = await supabase.from("siparis_sablonlari").select("id, sablon_adi, firma_id").eq("sirket_id", aktifSirket.id).order("sablon_adi");
+        if (data) {
+            // Kalem sayılarını çek
+            const sablonIds = data.map(s => s.id);
+            const { data: kalemData } = sablonIds.length > 0 ? await supabase.from("siparis_sablon_kalemleri").select("sablon_id").in("sablon_id", sablonIds) : { data: [] };
+            const kalemSayilari: Record<number, number> = {};
+            (kalemData || []).forEach(k => { kalemSayilari[k.sablon_id] = (kalemSayilari[k.sablon_id] || 0) + 1; });
+            setSablonlar(data.map(s => ({ ...s, kalem_sayisi: kalemSayilari[s.id] || 0 })));
+        }
+        setSablonYukleniyor(false);
+    };
+
+    const sablonYukle = async (sablonId: number) => {
+        const sablon = sablonlar.find(s => s.id === sablonId);
+        if (!sablon) return;
+        const { data: kalemler } = await supabase.from("siparis_sablon_kalemleri").select("*").eq("sablon_id", sablonId);
+        if (!kalemler || kalemler.length === 0) { toast.error("Şablonda kalem bulunamadı"); return; }
+
+        const mevcutDolu = siparisKalemleri.some(k => k.urun_adi.trim());
+        const yukle = () => {
+            const yeniKalemler: YeniKalem[] = kalemler.map(k => ({
+                urun_adi: k.urun_adi || "",
+                miktar: Number(k.miktar) || 1,
+                birim: k.birim || "Adet",
+                birim_fiyat: Number(k.birim_fiyat) || 0,
+            }));
+            setSiparisKalemleri(yeniKalemler);
+            if (sablon.firma_id) setSeciliCariId(String(sablon.firma_id));
+            setSablonModalAcik(false);
+            if (!yeniModalAcik) setYeniModalAcik(true);
+            toast.success(`"${sablon.sablon_adi}" şablonu yüklendi`);
+        };
+
+        if (mevcutDolu) {
+            onayla({
+                baslik: "Şablon Yükle",
+                mesaj: "Mevcut sipariş kalemleri silinecek ve şablondaki kalemlerle değiştirilecek.",
+                onayMetni: "Devam Et",
+                tehlikeli: false,
+                onOnayla: yukle,
+            });
+        } else {
+            yukle();
+        }
+    };
+
+    const sablonSil = async (id: number) => {
+        await supabase.from("siparis_sablon_kalemleri").delete().eq("sablon_id", id);
+        await supabase.from("siparis_sablonlari").delete().eq("id", id);
+        toast.success("Şablon silindi");
+        sablonlariGetir();
+    };
+
+    const mevcutSiparisiSablonKaydet = async () => {
+        if (!aktifSirket || !sablonKaydetAdi.trim()) { toast.error("Şablon adı giriniz"); return; }
+        const gecerliKalemler = siparisKalemleri.filter(k => k.urun_adi.trim() && k.miktar > 0);
+        if (gecerliKalemler.length === 0) { toast.error("Kaydedilecek kalem yok"); return; }
+        setSablonKaydediliyor(true);
+        const { data: sablonData, error } = await supabase.from("siparis_sablonlari").insert({
+            sirket_id: aktifSirket.id,
+            sablon_adi: sablonKaydetAdi.trim(),
+            firma_id: seciliCariId ? Number(seciliCariId) : null,
+        }).select().single();
+        if (error || !sablonData) { toast.error("Şablon kaydedilemedi"); setSablonKaydediliyor(false); return; }
+
+        const kalemVerileri = gecerliKalemler.map(k => {
+            const urun = urunler.find(u => u.urun_adi === k.urun_adi);
+            return {
+                sablon_id: sablonData.id,
+                urun_id: urun?.id || null,
+                urun_adi: k.urun_adi,
+                miktar: k.miktar,
+                birim_fiyat: k.birim_fiyat,
+                birim: k.birim,
+            };
+        });
+        await supabase.from("siparis_sablon_kalemleri").insert(kalemVerileri);
+        toast.success("Şablon kaydedildi");
+        setSablonKaydetModalAcik(false);
+        setSablonKaydetAdi("");
+        setSablonKaydediliyor(false);
+    };
 
     const siparisKaydet = async () => {
         if (!aktifSirket) return;
@@ -141,15 +291,19 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
 
         setKaydediliyor(true);
         try {
-            const toplam = gecerliKalemler.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
+            const araTotal = gecerliKalemler.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
+            const { indirim } = kampanyaIndirimi();
+            const toplam = Math.max(araTotal - indirim, 0);
             const siparisNo = await siparisNoUret("SIP");
 
+            const seciliPlasiyer = plasiyerler.find(p => p.id === Number(seciliPlasiyerId));
             const { data: siparisData, error: siparisError } = await supabase.from("siparisler").insert([{
                 siparis_no: siparisNo,
                 satici_sirket_id: aktifSirket.id,
                 alici_firma_id: Number(seciliCariId),
                 durum: "Onay Bekliyor",
-                toplam_tutar: toplam
+                toplam_tutar: toplam,
+                ...(seciliPlasiyer ? { plasiyer_id: seciliPlasiyer.id, plasiyer_adi: seciliPlasiyer.ad_soyad } : {})
             }]).select().single();
 
             if (siparisError) throw siparisError;
@@ -164,6 +318,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
             }
 
             toast.success(`Sipariş başarıyla oluşturuldu! Fiş No: ${siparisNo}`);
+            await bildirimEkle(aktifSirket.id, "Yeni Sipariş Oluşturuldu", `${siparisNo} numaralı sipariş (₺${toplam.toLocaleString("tr-TR", {minimumFractionDigits:2})})`, "BASARI", "SIPARIS", siparisData.id);
             setYeniModalAcik(false);
             verileriGetir(aktifSirket.id);
         } catch (error) {
@@ -350,6 +505,21 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
         setOnayGonderiliyor(false);
     };
 
+    // Toplu sipariş seçim fonksiyonları
+    const sipSecimToggle = (id: number) => { const y = new Set(seciliSiparisler); if (y.has(id)) y.delete(id); else y.add(id); setSeciliSiparisler(y); };
+    const topluSiparisSil = () => {
+        onayla({ baslik: "Toplu Sil", mesaj: `${seciliSiparisler.size} siparişi silmek istediğinize emin misiniz?`, onayMetni: "Sil", tehlikeli: true, onOnayla: async () => {
+            for (const id of seciliSiparisler) { await supabase.from("siparis_kalemleri").delete().eq("siparis_id", id); await supabase.from("siparisler").delete().eq("id", id); }
+            toast.success(`${seciliSiparisler.size} sipariş silindi`); setSeciliSiparisler(new Set());
+            if (aktifSirket) verileriGetir(aktifSirket.id);
+        }});
+    };
+    const topluDurumDegistir = async (yeniDurum: string) => {
+        for (const id of seciliSiparisler) await supabase.from("siparisler").update({ durum: yeniDurum }).eq("id", id);
+        toast.success(`${seciliSiparisler.size} siparişin durumu "${yeniDurum}" olarak güncellendi`); setSeciliSiparisler(new Set());
+        if (aktifSirket) verileriGetir(aktifSirket.id);
+    };
+
     const filtrelenmisSiparisler = siparisler.filter(s =>
         (s.siparis_no || "").toLowerCase().includes(aramaTerimi.toLowerCase()) ||
         (s.cari_adi || "").toLowerCase().includes(aramaTerimi.toLowerCase())
@@ -387,6 +557,9 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                             <button onClick={yeniSiparisAc} className="btn-primary whitespace-nowrap">
                                 <i className="fas fa-plus mr-2"></i> Yeni Sipariş Ekle
                             </button>
+                            <button onClick={() => { sablonlariGetir(); setSablonModalAcik(true); }} className="btn-secondary whitespace-nowrap">
+                                <i className="fas fa-copy mr-2"></i> Şablonlar
+                            </button>
                             <button onClick={inceleButonuTikla} className="btn-secondary whitespace-nowrap">
                                 <i className="fas fa-eye mr-2"></i> İncele / Detay
                             </button>
@@ -399,11 +572,35 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                             <button onClick={() => window.print()} className="btn-secondary whitespace-nowrap">
                                 <i className="fas fa-print mr-2"></i> Yazdır
                             </button>
+                            <div className="relative">
+                                <button onClick={() => setSipExportMenu(!sipExportMenu)} className="btn-secondary whitespace-nowrap"><i className="fas fa-download mr-2"></i> Dışa Aktar</button>
+                                {sipExportMenu && (
+                                    <div className="absolute top-full left-0 mt-1 bg-white border border-[#e2e8f0] shadow-lg z-20 w-36" onClick={() => setSipExportMenu(false)}>
+                                        <button onClick={() => { const cols = [{header:"Fiş No",key:"siparis_no",width:15},{header:"Müşteri",key:"cari_adi",width:25},{header:"Durum",key:"durum",width:15},{header:"Tutar",key:"toplam_tutar",width:15},{header:"Tarih",key:"tarih",width:12},{header:"Plasiyer",key:"plasiyer_adi",width:15}]; const d = filtrelenmisSiparisler.map(s => ({siparis_no:s.siparis_no,cari_adi:s.cari_adi,durum:s.durum,toplam_tutar:s.toplam_tutar,tarih:s.created_at?new Date(s.created_at).toLocaleDateString("tr-TR"):"",plasiyer_adi:(s as unknown as Record<string,string>).plasiyer_adi||""})); excelExport(d, cols, "siparisler"); }} className="w-full px-3 py-2 text-left text-[11px] font-semibold hover:bg-[#f8fafc] flex items-center gap-2"><i className="fas fa-file-excel text-[#059669]" /> Excel</button>
+                                        <button onClick={() => { const cols = [{header:"Fiş No",key:"siparis_no",width:15},{header:"Müşteri",key:"cari_adi",width:25},{header:"Durum",key:"durum",width:15},{header:"Tutar",key:"toplam_tutar",width:15},{header:"Tarih",key:"tarih",width:12},{header:"Plasiyer",key:"plasiyer_adi",width:15}]; const d = filtrelenmisSiparisler.map(s => ({siparis_no:s.siparis_no,cari_adi:s.cari_adi,durum:s.durum,toplam_tutar:s.toplam_tutar,tarih:s.created_at?new Date(s.created_at).toLocaleDateString("tr-TR"):"",plasiyer_adi:(s as unknown as Record<string,string>).plasiyer_adi||""})); pdfExport(d, cols, "siparisler", "Sipariş Listesi"); }} className="w-full px-3 py-2 text-left text-[11px] font-semibold hover:bg-[#f8fafc] flex items-center gap-2"><i className="fas fa-file-pdf text-[#dc2626]" /> PDF</button>
+                                    </div>
+                                )}
+                            </div>
                             <div className="flex-1 max-w-lg relative ml-auto">
                                 <input type="text" placeholder="Fiş No veya Cari Ünvanı ile arama yapın..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-full" />
                                 <i className="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                             </div>
                         </div>
+
+                        {/* TOPLU İŞLEM BARI */}
+                        {seciliSiparisler.size > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 flex-wrap" style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe" }}>
+                                <span className="text-[11px] font-bold text-[#1d4ed8]"><i className="fas fa-check-square mr-1" />{seciliSiparisler.size} sipariş seçildi</span>
+                                <select onChange={e => { if (e.target.value) topluDurumDegistir(e.target.value); e.target.value = ""; }} className="input-kurumsal text-[10px] h-7 w-auto" defaultValue="">
+                                    <option value="" disabled>Durum Değiştir...</option>
+                                    <option value="TAMAMLANDI">Tamamlandı</option>
+                                    <option value="HAZIRLANIYOR">Hazırlanıyor</option>
+                                    <option value="IPTAL">İptal</option>
+                                </select>
+                                <button onClick={topluSiparisSil} className="px-2 py-1 text-[9px] font-bold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors"><i className="fas fa-trash mr-1" />Sil</button>
+                                <button onClick={() => setSeciliSiparisler(new Set())} className="ml-auto text-[9px] text-[#64748b] hover:text-[#0f172a]"><i className="fas fa-times mr-1" />Seçimi Kaldır</button>
+                            </div>
+                        )}
 
                         {/* MOBİL KART GÖRÜNÜMÜ */}
                         <div className="md:hidden flex-1 overflow-auto relative print:hidden">
@@ -439,7 +636,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                             <table className="tbl-kurumsal">
                                 <thead>
                                     <tr>
-                                        <th className="w-8 text-center"><i className="fas fa-caret-down text-slate-400"></i></th>
+                                        <th className="w-8 text-center"><input type="checkbox" checked={filtrelenmisSiparisler.length > 0 && filtrelenmisSiparisler.every(s => seciliSiparisler.has(s.id))} onChange={() => { if (seciliSiparisler.size === filtrelenmisSiparisler.length) setSeciliSiparisler(new Set()); else setSeciliSiparisler(new Set(filtrelenmisSiparisler.map(s => s.id))); }} className="cursor-pointer" /></th>
                                         <th className="w-32">Belge / Fiş No</th>
                                         <th>Cari Adı (Müşteri)</th>
                                         <th className="w-36 text-center">Durum</th>
@@ -459,8 +656,8 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                             const durumBilgi = getDurumBilgi(s.durum);
                                             return (
                                                 <tr key={s.id} onClick={() => setSeciliSiparisId(s.id)} onDoubleClick={() => detayAc(s)} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 text-slate-800' : 'bg-white hover:bg-slate-50'}`}>
-                                                    <td className="text-center">
-                                                        {isSelected ? <i className="fas fa-caret-right text-blue-500"></i> : <i className="fas fa-caret-down text-transparent"></i>}
+                                                    <td className="text-center" onClick={e => e.stopPropagation()}>
+                                                        <input type="checkbox" checked={seciliSiparisler.has(s.id)} onChange={() => sipSecimToggle(s.id)} className="cursor-pointer" />
                                                     </td>
                                                     <td className="font-bold text-slate-600">{s.siparis_no}</td>
                                                     <td className="font-bold text-slate-800">{s.cari_adi}</td>
@@ -520,11 +717,18 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Fiş Tarihi</label>
                                     <input type="date" defaultValue={new Date().toISOString().split('T')[0]} className="input-kurumsal w-full" />
                                 </div>
-                                <div className="flex items-end">
-                                    <button onClick={kalemEkle} className="btn-primary">
-                                        <i className="fas fa-plus mr-2"></i> Yeni Kalem Ekle
-                                    </button>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Plasiyer</label>
+                                    <select value={seciliPlasiyerId} onChange={e => setSeciliPlasiyerId(e.target.value)} className="input-kurumsal w-full">
+                                        <option value="">-- Plasiyer Seçiniz --</option>
+                                        {plasiyerler.map(p => <option key={p.id} value={p.id}>{p.ad_soyad}</option>)}
+                                    </select>
                                 </div>
+                            </div>
+                            <div className="px-4 pb-2">
+                                <button onClick={kalemEkle} className="btn-primary">
+                                    <i className="fas fa-plus mr-2"></i> Yeni Kalem Ekle
+                                </button>
                             </div>
                         </div>
 
@@ -559,7 +763,10 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                 <input type="number" min={1} value={kalem.miktar} onChange={(e) => kalemGuncelle(index, 'miktar', Number(e.target.value))} className="input-kurumsal w-full text-center" />
                                             </td>
                                             <td>
-                                                <input type="number" min={0} step={0.01} value={kalem.birim_fiyat} onChange={(e) => kalemGuncelle(index, 'birim_fiyat', Number(e.target.value))} className="input-kurumsal w-full text-right" />
+                                                <div className="relative">
+                                                    <input type="number" min={0} step={0.01} value={kalem.birim_fiyat} onChange={(e) => kalemGuncelle(index, 'birim_fiyat', Number(e.target.value))} className="input-kurumsal w-full text-right" />
+                                                    {(() => { const u = urunler.find(ur => ur.urun_adi === kalem.urun_adi); return u && ozelFiyatMap[u.id] ? <span className="absolute -top-1.5 right-0 bg-emerald-50 text-[#059669] border border-emerald-200 text-[7px] font-bold px-1 py-0">Özel</span> : null; })()}
+                                                </div>
                                             </td>
                                             <td className="text-right font-bold text-[#1d4ed8]">
                                                 {(kalem.miktar * kalem.birim_fiyat).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
@@ -584,12 +791,25 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                         <p className="text-sm font-semibold text-slate-800">{siparisKalemleri.filter(k => k.urun_adi.trim()).length}</p>
                                     </div>
                                     <div>
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Ara Toplam</span>
+                                        <p className="text-sm font-semibold text-[#475569]">{kalemToplamHesapla().toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</p>
+                                    </div>
+                                    {kampanyaIndirimi().indirim > 0 && (
+                                        <div>
+                                            <span className="text-[10px] font-bold text-[#7c3aed] uppercase"><i className="fas fa-tags mr-1 text-[8px]" />{kampanyaIndirimi().kampanyaAdi}</span>
+                                            <p className="text-sm font-semibold text-[#dc2626]">-{kampanyaIndirimi().indirim.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</p>
+                                        </div>
+                                    )}
+                                    <div>
                                         <span className="text-[10px] font-bold text-slate-500 uppercase">Genel Toplam</span>
-                                        <p className="text-lg font-semibold text-[#1d4ed8]">{kalemToplamHesapla().toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</p>
+                                        <p className="text-lg font-semibold text-[#1d4ed8]">{Math.max(kalemToplamHesapla() - kampanyaIndirimi().indirim, 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</p>
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-x-2">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => { setSablonKaydetAdi(""); setSablonKaydetModalAcik(true); }} className="btn-secondary text-[10px]" title="Bu siparişi şablon olarak kaydet">
+                                    <i className="fas fa-copy mr-1"></i> Şablon Kaydet
+                                </button>
                                 <button onClick={() => setYeniModalAcik(false)} className="btn-secondary">
                                     <i className="fas fa-times text-[#dc2626] mr-2"></i> İptal
                                 </button>
@@ -847,6 +1067,84 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                     </div>
                 </div>
             )}
+            {/* ŞABLONLAR MODALI */}
+            {sablonModalAcik && (
+                <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={() => setSablonModalAcik(false)}>
+                    <div className="bg-white w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-3 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]"><i className="fas fa-copy mr-2 text-[#3b82f6]" />Sipariş Şablonları</div>
+                            <button onClick={() => setSablonModalAcik(false)} className="text-[#94a3b8] hover:text-[#0f172a]"><i className="fas fa-times" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                            {sablonYukleniyor ? (
+                                <div className="flex items-center justify-center py-12"><i className="fas fa-circle-notch fa-spin text-[#475569]" /></div>
+                            ) : sablonlar.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <i className="fas fa-copy text-[28px] text-[#e2e8f0] mb-2" />
+                                    <div className="text-[11px] text-[#94a3b8] font-medium">Kayıtlı şablon yok</div>
+                                    <div className="text-[10px] text-[#cbd5e1] mt-1">Sipariş oluşturup &quot;Şablon Kaydet&quot; butonuyla kaydedin</div>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {sablonlar.map(s => {
+                                        const firmaAdi = firmalar.find(f => f.id === s.firma_id)?.unvan;
+                                        return (
+                                            <div key={s.id} className="flex items-center gap-3 p-3 border border-[#e2e8f0] hover:bg-[#f8fafc] transition-colors">
+                                                <div className="w-8 h-8 bg-[#f1f5f9] text-[#475569] flex items-center justify-center shrink-0"><i className="fas fa-copy text-[11px]" /></div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-[12px] font-semibold text-[#0f172a]">{s.sablon_adi}</div>
+                                                    <div className="text-[10px] text-[#94a3b8]">
+                                                        {firmaAdi && <span className="mr-2">{firmaAdi}</span>}
+                                                        {s.kalem_sayisi} kalem
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => sablonYukle(s.id)} className="text-[10px] font-semibold px-3 py-1.5 bg-[#0f172a] text-white hover:bg-[#1e293b] transition-colors">
+                                                    <i className="fas fa-download text-[8px] mr-1" /> Yükle
+                                                </button>
+                                                <button onClick={() => sablonSil(s.id)} className="text-[10px] font-semibold px-2 py-1.5 text-[#dc2626] border border-[#fecaca] hover:bg-[#fef2f2] transition-colors">
+                                                    <i className="fas fa-trash text-[8px]" />
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ŞABLON KAYDET MODALI */}
+            {sablonKaydetModalAcik && (
+                <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4" onClick={() => setSablonKaydetModalAcik(false)}>
+                    <div className="bg-white w-full max-w-sm" onClick={e => e.stopPropagation()}>
+                        <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">Şablon Olarak Kaydet</div>
+                            <button onClick={() => setSablonKaydetModalAcik(false)} className="text-[#94a3b8] hover:text-[#0f172a]"><i className="fas fa-times" /></button>
+                        </div>
+                        <div className="p-5 space-y-3">
+                            <div>
+                                <label className="text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-1 block">Şablon Adı *</label>
+                                <input type="text" value={sablonKaydetAdi} onChange={e => setSablonKaydetAdi(e.target.value)} className="input-kurumsal w-full" placeholder="Örn: Haftalık Market Siparişi" autoFocus />
+                            </div>
+                            <div className="p-3 bg-[#f8fafc] border border-[#e2e8f0]">
+                                <div className="text-[10px] text-[#475569]">
+                                    <span className="font-semibold">{siparisKalemleri.filter(k => k.urun_adi.trim()).length}</span> kalem kaydedilecek
+                                    {seciliCariId && <span className="ml-2">· Müşteri: <span className="font-semibold">{firmalar.find(f => f.id === Number(seciliCariId))?.unvan}</span></span>}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="px-5 py-3 flex items-center justify-end gap-2" style={{ borderTop: "1px solid var(--c-border)" }}>
+                            <button onClick={() => setSablonKaydetModalAcik(false)} className="btn-secondary text-[11px]">İptal</button>
+                            <button onClick={mevcutSiparisiSablonKaydet} disabled={sablonKaydediliyor} className="btn-primary text-[11px] flex items-center gap-1.5">
+                                {sablonKaydediliyor ? <i className="fas fa-circle-notch fa-spin text-[10px]" /> : <i className="fas fa-save text-[10px]" />}
+                                Kaydet
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <OnayModal />
         </>
     );
