@@ -57,3 +57,43 @@ export async function siparisNoUret(prefix: "SIP" | "POS" = "SIP"): Promise<stri
   // 3 denemede de çakışma olursa timestamp ekle
   return `${onEk}${Date.now().toString().slice(-4)}`;
 }
+
+export async function faturaNoUret(): Promise<string> {
+  const bugun = new Date();
+  const tarihStr = bugun.getFullYear().toString() +
+    (bugun.getMonth() + 1).toString().padStart(2, "0") +
+    bugun.getDate().toString().padStart(2, "0");
+
+  const onEk = `FAT-${tarihStr}-`;
+
+  for (let deneme = 0; deneme < 3; deneme++) {
+    const { data } = await supabase
+      .from("faturalar")
+      .select("fatura_no")
+      .like("fatura_no", `${onEk}%`)
+      .order("fatura_no", { ascending: false })
+      .limit(1);
+
+    let sira = 1;
+    if (data && data.length > 0) {
+      const sonNo = data[0].fatura_no as string;
+      const sonSira = parseInt(sonNo.split("-").pop() || "0", 10);
+      if (!isNaN(sonSira)) sira = sonSira + 1;
+    }
+
+    const yeniNo = `${onEk}${sira.toString().padStart(3, "0")}`;
+
+    const { data: kontrol } = await supabase
+      .from("faturalar")
+      .select("id")
+      .eq("fatura_no", yeniNo)
+      .limit(1);
+
+    if (!kontrol || kontrol.length === 0) {
+      return yeniNo;
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  return `${onEk}${Date.now().toString().slice(-4)}`;
+}

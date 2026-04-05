@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { supabase } from "@/app/lib/supabase";
+import { supabase, faturaNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
@@ -17,7 +17,7 @@ interface FaturaRecord {
   kdv_toplam: number;
   genel_toplam: number;
   durum: string;
-  firmalar?: { unvan: string };
+  cari_adi?: string;
 }
 interface FirmaRecord {
   id: number;
@@ -40,6 +40,7 @@ export default function FaturaMerkezi() {
 
   // MODAL STATELERİ
   const [modalAcik, setModalAcik] = useState(false);
+  const [modalMod, setModalMod] = useState<"goruntule" | "duzenle">("duzenle");
   const [faturaTipi, setFaturaTipi] = useState<"GELEN" | "GIDEN">("GIDEN");
   const [faturaForm, setFaturaForm] = useState<FaturaFormState>({ fatura_no: "", tarih: new Date().toISOString().split('T')[0], cari_id: "" });
   const [faturaKalemleri, setFaturaKalemleri] = useState<FaturaKalemi[]>([]);
@@ -49,7 +50,7 @@ export default function FaturaMerkezi() {
       const { data: fData } = await supabase.from("firmalar").select("*").eq("sahip_sirket_id", sirketId).order('unvan');
       setFirmalar(fData || []);
 
-      const { data: faturaData } = await supabase.from("faturalar").select("*, firmalar(unvan)").eq("sirket_id", sirketId).order('tarih', { ascending: false }).order('id', { ascending: false });
+      const { data: faturaData } = await supabase.from("faturalar").select("*").eq("sirket_id", sirketId).order('id', { ascending: false });
       setFaturalar(faturaData || []);
       setYukleniyor(false);
   }
@@ -65,25 +66,48 @@ export default function FaturaMerkezi() {
   }, [aktifSirket, kullaniciRol]);
 
   // YENİ FATURA OLUŞTURMA BAŞLATICI
-  const yeniFaturaBaslat = (tip: "GELEN" | "GIDEN") => {
+  const yeniFaturaBaslat = async (tip: "GELEN" | "GIDEN") => {
+      setModalMod("duzenle");
       setFaturaTipi(tip);
       setSeciliFaturaId(null);
-      setFaturaForm({ fatura_no: `FTR-${Math.floor(10000 + Math.random() * 90000)}`, tarih: new Date().toISOString().split('T')[0], cari_id: "" });
+      const yeniNo = await faturaNoUret();
+      setFaturaForm({ fatura_no: yeniNo, tarih: new Date().toISOString().split('T')[0], cari_id: "" });
       setFaturaKalemleri([{ urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
       setModalAcik(true);
   };
 
-  const incele = async () => {
-      if (!seciliFaturaId) { toast.error("Lütfen listeden bir fatura seçin!"); return; }
-      const fatura = faturalar.find(f => f.id === seciliFaturaId);
+  const faturaModalAc = async (mod: "goruntule" | "duzenle", faturaId?: number) => {
+      const hedefId = faturaId || seciliFaturaId;
+      if (!hedefId) { toast.error("Lütfen listeden bir fatura seçin!"); return; }
+      const fatura = faturalar.find(f => f.id === hedefId);
       if (!fatura) return;
 
+      setSeciliFaturaId(hedefId);
+      setModalMod(mod);
       setFaturaTipi(fatura.tip);
       setFaturaForm({ fatura_no: fatura.fatura_no, tarih: fatura.tarih, cari_id: fatura.cari_id?.toString() || "" });
 
-      const { data } = await supabase.from("fatura_kalemleri").select("*").eq("fatura_id", fatura.id);
-      setFaturaKalemleri(data || []);
+      const { data: kalemData } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", fatura.id);
+      setFaturaKalemleri(kalemData || []);
       setModalAcik(true);
+  };
+
+  const faturaSilTekli = (faturaId: number) => {
+      onayla({
+          baslik: "Fatura Sil",
+          mesaj: "Bu faturayı silmek istediğinize emin misiniz?",
+          altMesaj: "Cari bakiye işlemi manuel düzeltilmelidir.",
+          onayMetni: "Evet, Sil",
+          tehlikeli: true,
+          onOnayla: async () => {
+              await supabase.from("fatura_detaylari").delete().eq("fatura_id", faturaId);
+              const { error } = await supabase.from("faturalar").delete().eq("id", faturaId);
+              if (error) { toast.error("Silme hatası: " + error.message); return; }
+              toast.success("Fatura silindi.");
+              setSeciliFaturaId(null);
+              if (aktifSirket) verileriGetir(aktifSirket.id);
+          }
+      });
   };
 
   const sil = async () => {
@@ -96,7 +120,7 @@ export default function FaturaMerkezi() {
           tehlikeli: true,
           onOnayla: async () => {
               try {
-                  await supabase.from("fatura_kalemleri").delete().eq("fatura_id", seciliFaturaId);
+                  await supabase.from("fatura_detaylari").delete().eq("fatura_id", seciliFaturaId);
                   const { error } = await supabase.from("faturalar").delete().eq("id", seciliFaturaId);
                   if (error) throw error;
                   toast.success("Fatura başarıyla silindi.");
@@ -132,9 +156,11 @@ export default function FaturaMerkezi() {
 
       if (!seciliFaturaId) {
           // YENİ FATURA KAYDI
+          const seciliFirma = firmalar.find(f => f.id === Number(faturaForm.cari_id));
           const { data, error } = await supabase.from("faturalar").insert([{
               sirket_id: aktifSirket?.id,
               cari_id: Number(faturaForm.cari_id),
+              cari_adi: seciliFirma?.unvan || null,
               fatura_no: faturaForm.fatura_no,
               tip: faturaTipi,
               tarih: faturaForm.tarih,
@@ -174,13 +200,25 @@ export default function FaturaMerkezi() {
 
       // KALEMLERİ YENİDEN YAZ
       if (islemYapilacakId) {
-          await supabase.from("fatura_kalemleri").delete().eq("fatura_id", islemYapilacakId);
-          const eklenecekler = faturaKalemleri.filter(k => k.urun_adi).map(k => ({
-              fatura_id: islemYapilacakId,
-              urun_adi: k.urun_adi, miktar: k.miktar, birim: k.birim, birim_fiyat: k.birim_fiyat,
-              kdv_orani: k.kdv_orani, toplam_tutar: (k.miktar * k.birim_fiyat) * (1 + (k.kdv_orani / 100))
-          }));
-          if (eklenecekler.length > 0) await supabase.from("fatura_kalemleri").insert(eklenecekler);
+          await supabase.from("fatura_detaylari").delete().eq("fatura_id", islemYapilacakId);
+          const eklenecekler = faturaKalemleri.filter(k => k.urun_adi).map(k => {
+              const araTutar = k.miktar * k.birim_fiyat;
+              const kdvTutari = araTutar * (k.kdv_orani / 100);
+              return {
+                  fatura_id: islemYapilacakId,
+                  urun_adi: k.urun_adi,
+                  miktar: k.miktar,
+                  birim: k.birim,
+                  birim_fiyat: k.birim_fiyat,
+                  kdv_orani: k.kdv_orani,
+                  kdv_tutari: kdvTutari,
+                  satir_toplami: araTutar + kdvTutari,
+              };
+          });
+          if (eklenecekler.length > 0) {
+              const { error: kalemError } = await supabase.from("fatura_detaylari").insert(eklenecekler);
+              if (kalemError) console.error("[fatura_detaylari insert hata]", kalemError);
+          }
       }
 
       toast.success("Fatura başarıyla kaydedildi!");
@@ -188,7 +226,11 @@ export default function FaturaMerkezi() {
       if (aktifSirket) verileriGetir(aktifSirket.id);
   };
 
-  const filtrelenmisFaturalar = faturalar.filter(f => f.fatura_no.toLowerCase().includes(aramaTerimi.toLowerCase()) || (f.firmalar?.unvan || "").toLowerCase().includes(aramaTerimi.toLowerCase()));
+  const filtrelenmisFaturalar = faturalar.filter(f => {
+      const q = aramaTerimi.toLowerCase();
+      const cariAdi = f.cari_adi || firmalar.find(fr => fr.id === f.cari_id)?.unvan || "";
+      return f.fatura_no.toLowerCase().includes(q) || cariAdi.toLowerCase().includes(q);
+  });
 
   if (!aktifSirket) return <div className="h-full flex items-center justify-center font-bold text-slate-500" style={{ background: "#f8fafc" }}>Sistem Doğrulanıyor...</div>;
 
@@ -207,8 +249,6 @@ export default function FaturaMerkezi() {
                     <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => yeniFaturaBaslat('GIDEN')} className="btn-primary flex items-center gap-2"><i className="fas fa-file-export text-[10px]" /> SATIŞ FATURASI</button>
                         <button onClick={() => yeniFaturaBaslat('GELEN')} className="btn-primary flex items-center gap-2" style={{ background: "#ea580c" }}><i className="fas fa-file-import text-[10px]" /> ALIŞ FATURASI</button>
-                        <button onClick={incele} className="btn-secondary flex items-center gap-2"><i className="fas fa-search text-[10px]" /> İNCELE</button>
-                        <button onClick={sil} className="btn-secondary flex items-center gap-2"><i className="fas fa-trash-alt text-[#dc2626] text-[10px]" /> SİL</button>
                     </div>
                     <div className="relative">
                         <input type="text" placeholder="Fatura No veya Cari..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-64" />
@@ -220,35 +260,37 @@ export default function FaturaMerkezi() {
                     <table className="tbl-kurumsal">
                         <thead>
                             <tr>
-                                <th className="w-8 text-center"><i className="fas fa-caret-down"></i></th>
                                 <th className="w-32 text-center">Tarih</th>
                                 <th className="w-32">Fatura No</th>
                                 <th className="w-24 text-center">Yön</th>
                                 <th>Cari Ünvanı (Alıcı/Satıcı)</th>
-                                <th className="w-32 text-right">Ara Toplam</th>
-                                <th className="w-32 text-right">KDV Toplam</th>
                                 <th className="w-32 text-right">Genel Toplam (TL)</th>
+                                <th className="w-28 text-center">İşlem</th>
                             </tr>
                         </thead>
                         <tbody>
                             {yukleniyor ? (
-                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
                             ) : filtrelenmisFaturalar.length === 0 ? (
-                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
                             ) : (
                             filtrelenmisFaturalar.map((f) => {
                                 const isSelected = seciliFaturaId === f.id;
                                 const isGiden = f.tip === "GIDEN";
                                 return (
-                                    <tr key={f.id} onClick={() => setSeciliFaturaId(f.id)} onDoubleClick={incele} className={`cursor-pointer select-none ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500 text-slate-800' : 'bg-white hover:bg-slate-50'}`}>
-                                        <td className="text-center">{isSelected && <i className="fas fa-caret-right text-blue-500"></i>}</td>
+                                    <tr key={f.id} onDoubleClick={() => faturaModalAc("goruntule", f.id)} className="bg-white hover:bg-slate-50">
                                         <td className="text-center">{new Date(f.tarih).toLocaleDateString('tr-TR')}</td>
                                         <td className="font-bold">{f.fatura_no}</td>
                                         <td className={`text-center font-semibold ${isGiden ? 'text-[#1d4ed8]' : 'text-orange-500'}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
-                                        <td>{f.firmalar?.unvan || '-'}</td>
-                                        <td className="text-right">{Number(f.ara_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                        <td className="text-right">{Number(f.kdv_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                        <td>{f.cari_adi || firmalar.find(fr => fr.id === f.cari_id)?.unvan || '-'}</td>
                                         <td className="text-right font-semibold">{Number(f.genel_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
+                                        <td className="text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button onClick={(e) => { e.stopPropagation(); faturaModalAc("goruntule", f.id); }} className="w-7 h-7 bg-blue-50 text-[#1d4ed8] border border-blue-200 hover:bg-blue-100 flex items-center justify-center transition-colors" title="İncele"><i className="fas fa-eye text-[9px]"></i></button>
+                                                <button onClick={(e) => { e.stopPropagation(); faturaModalAc("duzenle", f.id); }} className="w-7 h-7 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 flex items-center justify-center transition-colors" title="Düzenle"><i className="fas fa-edit text-[9px]"></i></button>
+                                                <button onClick={(e) => { e.stopPropagation(); faturaSilTekli(f.id); }} className="w-7 h-7 bg-red-50 text-[#dc2626] border border-red-200 hover:bg-red-100 flex items-center justify-center transition-colors" title="Sil"><i className="fas fa-trash text-[9px]"></i></button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 );
                             })
@@ -267,9 +309,12 @@ export default function FaturaMerkezi() {
             <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
               <h3 className={`text-sm font-semibold flex items-center ${faturaTipi === 'GIDEN' ? 'text-[#1d4ed8]' : 'text-orange-800'}`}>
                   <i className={`fas ${faturaTipi === 'GIDEN' ? 'fa-file-export' : 'fa-file-import'} mr-2`}></i>
-                  {faturaTipi === 'GIDEN' ? 'Satış Faturası (Giden)' : 'Alış Faturası (Gelen)'}
+                  {modalMod === "goruntule" ? "Fatura Detayı" : (seciliFaturaId ? "Fatura Düzenle" : (faturaTipi === 'GIDEN' ? 'Satış Faturası (Giden)' : 'Alış Faturası (Gelen)'))}
               </h3>
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
+                 {modalMod === "goruntule" && (
+                     <button onClick={() => setModalMod("duzenle")} className="btn-secondary text-xs font-bold"><i className="fas fa-edit mr-1"></i> Düzenle</button>
+                 )}
                  <button onClick={() => window.print()} className="btn-secondary text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
                  <button onClick={() => setModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
               </div>
@@ -278,14 +323,18 @@ export default function FaturaMerkezi() {
             <div className="p-4 bg-white shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--c-border)" }}>
                 <div className="flex flex-col sm:flex-row gap-4 min-w-[500px]">
                     <div className="flex-1 space-y-2">
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} className="input-kurumsal flex-1" /></div>
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} className="input-kurumsal flex-1" /></div>
+                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f8fafc] cursor-default" : ""}`} /></div>
+                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f8fafc] cursor-default" : ""}`} /></div>
                         <div className="flex items-center">
                             <label className="w-24 text-xs font-bold text-slate-700">Cari Hesap</label>
-                            <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="input-kurumsal flex-1">
-                                <option value="">--- Fatura Kesilecek Cariyi Seçiniz ---</option>
-                                {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
-                            </select>
+                            {modalMod === "goruntule" ? (
+                                <input type="text" disabled value={firmalar.find(f => f.id === Number(faturaForm.cari_id))?.unvan || "-"} className="input-kurumsal flex-1 bg-[#f8fafc] cursor-default" />
+                            ) : (
+                                <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="input-kurumsal flex-1">
+                                    <option value="">--- Fatura Kesilecek Cariyi Seçiniz ---</option>
+                                    {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
+                                </select>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -302,7 +351,7 @@ export default function FaturaMerkezi() {
                             <th className="w-32 text-right">Birim Fiyat</th>
                             <th className="w-16 text-center">KDV %</th>
                             <th className="w-32 text-right">KDV&apos;li Tutar</th>
-                            <th className="w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>
+                            {modalMod === "duzenle" && <th className="w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -312,27 +361,29 @@ export default function FaturaMerkezi() {
                             return (
                                 <tr key={index} className="hover:bg-[#f8fafc] focus-within:bg-[#f8fafc] transition-colors">
                                     <td className="text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
-                                    <td className="p-0"><input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok veya Hizmet yazın" className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0"><input type="number" min="1" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0"><input type="text" value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white uppercase" /></td>
-                                    <td className="p-0"><input type="number" min="0" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" /></td>
-                                    <td className="p-0"><input type="number" min="0" value={item.kdv_orani} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center text-orange-600 outline-none bg-transparent focus:bg-white" /></td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-semibold text-slate-800" : "p-0"}`}>{modalMod === "goruntule" ? item.urun_adi : <input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok veya Hizmet yazın" className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`}>{modalMod === "goruntule" ? item.miktar : <input type="number" min="1" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <input type="text" value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white uppercase" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? Number(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2}) : <input type="number" min="0" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center text-orange-600" : "p-0"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <input type="number" min="0" value={item.kdv_orani} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center text-orange-600 outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
-                                    <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>
+                                    {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
-                <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-[#1d4ed8] hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>
+                {modalMod === "duzenle" && <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-[#1d4ed8] hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>}
             </div>
 
             <div className="p-4 flex flex-col sm:flex-row justify-between sm:items-end gap-4 shrink-0 print:bg-white print:border-black print:border-t-2" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
-                <div className="print:hidden w-full sm:w-auto">
-                    <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center ${faturaTipi === 'GELEN' ? '' : ''}`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
-                        <i className="fas fa-save mr-2"></i> Faturayı Kaydet
-                    </button>
-                </div>
+                {modalMod === "duzenle" && (
+                    <div className="print:hidden w-full sm:w-auto">
+                        <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
+                            <i className="fas fa-save mr-2"></i> Faturayı Kaydet
+                        </button>
+                    </div>
+                )}
 
                 <div className="bg-white p-3 w-full sm:w-72 self-end" style={{ border: "1px solid var(--c-border)" }}>
                     <div className="flex justify-between items-center pb-1 mb-1" style={{ borderBottom: "1px solid var(--c-border)" }}>

@@ -57,6 +57,7 @@ export default function CariKartlarSayfasi() {
     const [yeniCariModalAcik, setYeniCariModalAcik] = useState<boolean>(false);
     const [islemBekliyor, setIslemBekliyor] = useState<boolean>(false);
     const [aktifSekme, setAktifSekme] = useState<"genel" | "iletisim">("genel");
+    const [duzenleCarId, setDuzenleCarId] = useState<number | null>(null);
     const [yeniCari, setYeniCari] = useState<YeniCariData>({
         kodu: "", isim: "", tip: "firma", bakiye: "",
         telefon: "", telefon2: "", email: "", il: "", ilce: "", adres: "", vergiDairesi: "", vergiNo: ""
@@ -172,9 +173,33 @@ export default function CariKartlarSayfasi() {
     };
 
     const yeniCariEkraniAc = () => {
+        setDuzenleCarId(null);
         setYeniCari({
             kodu: "C" + Math.floor(10000 + Math.random() * 90000).toString(),
             isim: "", tip: "firma", bakiye: "", telefon: "", telefon2: "", email: "", il: "", ilce: "", adres: "", vergiDairesi: "", vergiNo: ""
+        });
+        setAktifSekme("genel");
+        setYeniCariModalAcik(true);
+    };
+
+    const cariDuzenleAc = async (cari: CariOzet) => {
+        if (!aktifSirket) return;
+        const { data } = await supabase.from("firmalar").select("*").eq("id", cari.gercekId).single();
+        if (!data) { toast.error("Cari bilgileri yüklenemedi"); return; }
+        setDuzenleCarId(cari.gercekId);
+        setYeniCari({
+            kodu: `F-${cari.gercekId}`,
+            isim: data.unvan || "",
+            tip: data.firma_tipi === "Bireysel" ? "cari" : "firma",
+            bakiye: String(data.bakiye || ""),
+            telefon: data.telefon || "",
+            telefon2: data.telefon2 || "",
+            email: data.eposta || "",
+            il: data.il || "",
+            ilce: data.ilce || "",
+            adres: data.adres || "",
+            vergiDairesi: data.vergi_dairesi || "",
+            vergiNo: data.vergi_no || "",
         });
         setAktifSekme("genel");
         setYeniCariModalAcik(true);
@@ -186,19 +211,38 @@ export default function CariKartlarSayfasi() {
         try {
             if (!aktifSirket) return;
             const baslangicBakiyesi = parseTutar(yeniCari.bakiye);
-            if (yeniCari.tip === 'firma') {
+
+            if (duzenleCarId) {
+                // GÜNCELLEME MODU
+                const { error } = await supabase.from('firmalar').update({
+                    unvan: yeniCari.isim.trim(),
+                    bakiye: baslangicBakiyesi,
+                    telefon: yeniCari.telefon || null,
+                    telefon2: yeniCari.telefon2 || null,
+                    eposta: yeniCari.email || null,
+                    il: yeniCari.il || null,
+                    ilce: yeniCari.ilce || null,
+                    adres: yeniCari.adres || null,
+                    vergi_dairesi: yeniCari.vergiDairesi || null,
+                    vergi_no: yeniCari.vergiNo || null,
+                }).eq("id", duzenleCarId);
+                if (error) throw new Error(error.message || JSON.stringify(error));
+                toast.success("Cari kart güncellendi!");
+            } else if (yeniCari.tip === 'firma') {
                 const { error } = await supabase.from('firmalar').insert([{
                     unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id
                 }]);
                 if (error) throw error;
+                toast.success("Cari kart başarıyla oluşturuldu!");
             } else {
                 const { error } = await supabase.from('firmalar').insert([{
                     unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id, firma_tipi: 'Bireysel'
                 }]);
                 if (error) throw new Error(error.message || JSON.stringify(error));
+                toast.success("Cari kart başarıyla oluşturuldu!");
             }
-            toast.success("Cari kart başarıyla oluşturuldu!");
             setYeniCariModalAcik(false);
+            setDuzenleCarId(null);
             verileriGetir(aktifSirket.id);
         } catch (error) { toast.error(`Kayıt sırasında hata oluştu: ${error instanceof Error ? error.message : String(error)}`); }
         setIslemBekliyor(false);
@@ -547,6 +591,9 @@ export default function CariKartlarSayfasi() {
                                             <button onClick={() => cariHareketleriGetir(cari)} className="btn-secondary flex items-center text-[10px]">
                                                 <i className="fas fa-list-alt mr-1"></i> Ekstre
                                             </button>
+                                            <button onClick={() => cariDuzenleAc(cari)} className="btn-secondary text-[#1d4ed8] text-[10px]" style={{ borderColor: "#bfdbfe" }} title="Düzenle">
+                                                <i className="fas fa-edit"></i>
+                                            </button>
                                             <button onClick={() => cariSil(cari)} className="btn-secondary text-[#dc2626] text-[10px]" style={{ borderColor: "#fecaca" }} title="Cariyi Sil">
                                                 <i className="fas fa-trash"></i>
                                             </button>
@@ -598,6 +645,9 @@ export default function CariKartlarSayfasi() {
                                                 <div className="flex items-center justify-center gap-2">
                                                     <button onClick={() => cariHareketleriGetir(cari)} className="btn-secondary flex items-center">
                                                         <i className="fas fa-list-alt mr-1.5"></i> Ekstre
+                                                    </button>
+                                                    <button onClick={() => cariDuzenleAc(cari)} className="btn-secondary text-[#1d4ed8] opacity-0 group-hover:opacity-100" style={{ borderColor: "#bfdbfe" }} title="Düzenle">
+                                                        <i className="fas fa-edit"></i>
                                                     </button>
                                                     <button onClick={() => cariSil(cari)} className="btn-secondary text-[#dc2626] opacity-0 group-hover:opacity-100" style={{ borderColor: "#fecaca" }} title="Cariyi Sil">
                                                         <i className="fas fa-trash"></i>
@@ -675,11 +725,13 @@ export default function CariKartlarSayfasi() {
                         <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
                             <div className="flex items-center gap-2">
                                 <button onClick={cariKaydet} disabled={islemBekliyor} className="btn-primary flex items-center disabled:opacity-50">
-                                    <i className="fas fa-save mr-1.5"></i> Kaydet
+                                    <i className="fas fa-save mr-1.5"></i> {duzenleCarId ? "Güncelle" : "Kaydet"}
                                 </button>
-                                <button disabled className="btn-secondary flex items-center opacity-50">
-                                    <i className="fas fa-trash-alt mr-1.5"></i> Sil
-                                </button>
+                                {!duzenleCarId && (
+                                    <button disabled className="btn-secondary flex items-center opacity-50">
+                                        <i className="fas fa-trash-alt mr-1.5"></i> Sil
+                                    </button>
+                                )}
                             </div>
                             <button onClick={() => setYeniCariModalAcik(false)} className="btn-secondary text-[#dc2626] flex items-center"><i className="fas fa-times mr-1"></i> Kapat</button>
                         </div>
@@ -703,7 +755,7 @@ export default function CariKartlarSayfasi() {
                                     </div>
                                     <div className="flex items-center">
                                         <label className="w-24 text-right pr-2 text-slate-500 font-semibold text-[11px]">Cari Tipi</label>
-                                        <select value={yeniCari.tip} onChange={(e) => setYeniCari({...yeniCari, tip: e.target.value as 'firma' | 'cari'})} className="input-kurumsal flex-1 font-semibold text-slate-800 cursor-pointer">
+                                        <select value={yeniCari.tip} onChange={(e) => setYeniCari({...yeniCari, tip: e.target.value as 'firma' | 'cari'})} disabled={!!duzenleCarId} className={`input-kurumsal flex-1 font-semibold text-slate-800 ${duzenleCarId ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                                             <option value="firma">B2B Kurumsal Firma</option>
                                             <option value="cari">Bireysel Müşteri</option>
                                         </select>
