@@ -199,6 +199,7 @@ export default function FaturaMerkezi() {
       }
 
       // KALEMLERİ YENİDEN YAZ
+      let kalemHatasi = false;
       if (islemYapilacakId) {
           await supabase.from("fatura_detaylari").delete().eq("fatura_id", islemYapilacakId);
           const eklenecekler = faturaKalemleri.filter(k => k.urun_adi).map(k => {
@@ -217,11 +218,18 @@ export default function FaturaMerkezi() {
           });
           if (eklenecekler.length > 0) {
               const { error: kalemError } = await supabase.from("fatura_detaylari").insert(eklenecekler);
-              if (kalemError) console.error("[fatura_detaylari insert hata]", kalemError);
+              if (kalemError) {
+                  console.error("[fatura_detaylari insert hata]", kalemError);
+                  kalemHatasi = true;
+              }
           }
       }
 
-      toast.success("Fatura başarıyla kaydedildi!");
+      if (kalemHatasi) {
+          toast.info("Fatura kaydedildi fakat bazı kalemler kaydedilemedi");
+      } else {
+          toast.success("Fatura başarıyla kaydedildi!");
+      }
       setModalAcik(false);
       if (aktifSirket) verileriGetir(aktifSirket.id);
   };
@@ -257,7 +265,8 @@ export default function FaturaMerkezi() {
                 </div>
 
                 <div className="flex-1 overflow-auto relative print:hidden" style={{ background: "var(--c-bg)" }}>
-                    <table className="tbl-kurumsal">
+                    {/* MASAÜSTÜ TABLO */}
+                    <table className="tbl-kurumsal hidden md:table">
                         <thead>
                             <tr>
                                 <th className="w-32 text-center">Tarih</th>
@@ -275,7 +284,6 @@ export default function FaturaMerkezi() {
                                 <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
                             ) : (
                             filtrelenmisFaturalar.map((f) => {
-                                const isSelected = seciliFaturaId === f.id;
                                 const isGiden = f.tip === "GIDEN";
                                 return (
                                     <tr key={f.id} onDoubleClick={() => faturaModalAc("goruntule", f.id)} className="bg-white hover:bg-slate-50">
@@ -297,6 +305,36 @@ export default function FaturaMerkezi() {
                             )}
                         </tbody>
                     </table>
+
+                    {/* MOBİL KART GÖRÜNÜMÜ */}
+                    <div className="md:hidden p-3 space-y-2">
+                        {yukleniyor ? (
+                            <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</div>
+                        ) : filtrelenmisFaturalar.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</div>
+                        ) : (
+                        filtrelenmisFaturalar.map((f) => {
+                            const isGiden = f.tip === "GIDEN";
+                            return (
+                                <div key={f.id} onClick={() => faturaModalAc("goruntule", f.id)} className="bg-white p-3 flex items-center justify-between gap-3" style={{ border: "1px solid var(--c-border)" }}>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-sm text-slate-800 truncate">{f.fatura_no}</span>
+                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${isGiden ? 'bg-blue-50 text-[#1d4ed8]' : 'bg-orange-50 text-orange-600'}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 truncate">{f.cari_adi || firmalar.find(fr => fr.id === f.cari_id)?.unvan || '-'}</p>
+                                        <p className="text-sm font-semibold text-slate-800 mt-1">{Number(f.genel_toplam || 0).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</p>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button onClick={(e) => { e.stopPropagation(); faturaModalAc("goruntule", f.id); }} className="w-8 h-8 bg-blue-50 text-[#1d4ed8] border border-blue-200 hover:bg-blue-100 flex items-center justify-center transition-colors" title="İncele"><i className="fas fa-eye text-xs"></i></button>
+                                        <button onClick={(e) => { e.stopPropagation(); faturaModalAc("duzenle", f.id); }} className="w-8 h-8 bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100 flex items-center justify-center transition-colors" title="Düzenle"><i className="fas fa-edit text-xs"></i></button>
+                                        <button onClick={(e) => { e.stopPropagation(); faturaSilTekli(f.id); }} className="w-8 h-8 bg-red-50 text-[#dc2626] border border-red-200 hover:bg-red-100 flex items-center justify-center transition-colors" title="Sil"><i className="fas fa-trash text-xs"></i></button>
+                                    </div>
+                                </div>
+                            );
+                        })
+                        )}
+                    </div>
                 </div>
             </>
         )}
