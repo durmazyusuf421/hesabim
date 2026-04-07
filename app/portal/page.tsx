@@ -377,13 +377,13 @@ export default function MusteriPortali() {
                                 {/* Orta: Tedarikçi */}
                                 <div className="text-[10px] font-semibold text-cyan-700 mt-0.5 mb-2">{saticiFirma}</div>
                                 {/* Alt: Birim + Miktar + Tutar */}
-                                <div className="flex items-center gap-2">
-                                    <select value={aktifBirimNo} onChange={(e) => setAktifBirimler({...aktifBirimler, [u.id]: Number(e.target.value)})} className="input-kurumsal text-[11px] font-semibold cursor-pointer px-1.5 py-2 w-24 shrink-0">
+                                <div className="flex items-center gap-2 mt-2 w-full overflow-hidden">
+                                    <select value={aktifBirimNo} onChange={(e) => setAktifBirimler({...aktifBirimler, [u.id]: Number(e.target.value)})} className="input-kurumsal text-[11px] font-semibold cursor-pointer px-1.5 py-2" style={{ width: "80px", flexShrink: 0 }}>
                                         <option value={-1}>{u.birim}</option>
                                         {u.alt_birimler && u.alt_birimler.map((ab: AltBirim, idx: number) => (<option key={idx} value={idx}>{ab.birim}</option>))}
                                     </select>
-                                    <input type="text" inputMode="decimal" value={miktar || ''} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') sepeteEkle(u, Number(v) || 0, gecerliBirim, gecerliFiyat); }} placeholder="0" className="input-kurumsal h-10 text-center text-[14px] font-bold flex-1 min-w-0" />
-                                    <div className="w-20 text-right text-[12px] font-bold text-[#059669] shrink-0">{miktar > 0 ? `${(miktar * gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})}` : ''}</div>
+                                    <input type="text" inputMode="decimal" value={miktar || ''} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') sepeteEkle(u, Number(v) || 0, gecerliBirim, gecerliFiyat); }} placeholder="0" className="input-kurumsal h-10 text-center text-[14px] font-bold" style={{ flex: 1, minWidth: 0 }} />
+                                    <div className="text-[12px] font-bold text-[#059669] text-right" style={{ width: "70px", flexShrink: 0 }}>{miktar > 0 ? `${(miktar * gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})}` : ''}</div>
                                 </div>
                             </div>
                         );
