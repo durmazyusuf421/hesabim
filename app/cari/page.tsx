@@ -720,88 +720,88 @@ export default function CariKartlarSayfasi() {
             {/* --- BİLNEX / ERP TARZI YENİ CARİ KAYIT MODALI --- */}
             {yeniCariModalAcik && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-0 md:p-4">
-                    <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-4xl overflow-hidden flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
+                    <div className="bg-white w-full h-full md:h-auto md:max-h-[90vh] md:max-w-4xl md:rounded overflow-hidden flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
 
-                        <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+                        <div className="p-3 flex justify-between items-center shrink-0 gap-2" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
                             <div className="flex items-center gap-2">
-                                <button onClick={cariKaydet} disabled={islemBekliyor} className="btn-primary flex items-center disabled:opacity-50">
+                                <button onClick={cariKaydet} disabled={islemBekliyor} className="btn-primary flex items-center disabled:opacity-50 text-sm md:text-xs h-10 md:h-auto px-3">
                                     <i className="fas fa-save mr-1.5"></i> {duzenleCarId ? "Güncelle" : "Kaydet"}
                                 </button>
                                 {!duzenleCarId && (
-                                    <button disabled className="btn-secondary flex items-center opacity-50">
+                                    <button disabled className="btn-secondary flex items-center opacity-50 text-sm md:text-xs h-10 md:h-auto px-3">
                                         <i className="fas fa-trash-alt mr-1.5"></i> Sil
                                     </button>
                                 )}
                             </div>
-                            <button onClick={() => setYeniCariModalAcik(false)} className="btn-secondary text-[#dc2626] flex items-center"><i className="fas fa-times mr-1"></i> Kapat</button>
+                            <button onClick={() => setYeniCariModalAcik(false)} className="btn-secondary text-[#dc2626] flex items-center text-sm md:text-xs h-10 md:h-auto px-3"><i className="fas fa-times mr-1"></i> Kapat</button>
                         </div>
 
                         <div className="p-3 shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
-                            <div className="flex gap-4">
-                                <div className="flex-1 space-y-1.5">
-                                    <div className="flex items-center">
-                                        <label className="w-24 text-right pr-2 text-slate-500 font-semibold text-[11px]">Kodu</label>
-                                        <input type="text" disabled value={yeniCari.kodu} className="input-kurumsal w-32 bg-amber-50 font-semibold text-[#1d4ed8]" />
+                            <div className="flex flex-col md:flex-row gap-3 md:gap-4">
+                                <div className="flex-1 space-y-2 md:space-y-1.5">
+                                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0">
+                                        <label className="text-left md:text-right md:w-24 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Kodu</label>
+                                        <input type="text" disabled value={yeniCari.kodu} className="input-kurumsal w-full md:w-32 h-10 md:h-auto text-sm md:text-xs bg-amber-50 font-semibold text-[#1d4ed8]" />
                                     </div>
-                                    <div className="flex items-center">
-                                        <label className="w-24 text-right pr-2 text-[#dc2626] font-semibold text-[11px]">Cari Adı / Ünvan</label>
-                                        <input type="text" autoFocus value={yeniCari.isim} onChange={(e) => setYeniCari({...yeniCari, isim: e.target.value.toUpperCase()})} className="input-kurumsal flex-1 uppercase font-semibold text-slate-800" />
+                                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0">
+                                        <label className="text-left md:text-right md:w-24 md:pr-2 text-[#dc2626] font-semibold text-xs md:text-[11px]">Cari Adı / Ünvan</label>
+                                        <input type="text" autoFocus value={yeniCari.isim} onChange={(e) => setYeniCari({...yeniCari, isim: e.target.value.toUpperCase()})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs uppercase font-semibold text-slate-800" />
                                     </div>
                                 </div>
-                                <div className="w-80 space-y-1.5">
-                                    <div className="flex items-center">
-                                        <label className="w-24 text-right pr-2 text-slate-500 font-semibold text-[11px]">Döviz Cinsi</label>
-                                        <select disabled className="input-kurumsal flex-1" style={{ background: "#f8fafc" }}><option>TL</option></select>
+                                <div className="w-full md:w-80 space-y-2 md:space-y-1.5">
+                                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0">
+                                        <label className="text-left md:text-right md:w-24 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Döviz Cinsi</label>
+                                        <select disabled className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs" style={{ background: "#f8fafc" }}><option>TL</option></select>
                                     </div>
-                                    <div className="flex items-center">
-                                        <label className="w-24 text-right pr-2 text-slate-500 font-semibold text-[11px]">Cari Tipi</label>
-                                        <select value={yeniCari.tip} onChange={(e) => setYeniCari({...yeniCari, tip: e.target.value as 'firma' | 'cari'})} disabled={!!duzenleCarId} className={`input-kurumsal flex-1 font-semibold text-slate-800 ${duzenleCarId ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                    <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0">
+                                        <label className="text-left md:text-right md:w-24 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Cari Tipi</label>
+                                        <select value={yeniCari.tip} onChange={(e) => setYeniCari({...yeniCari, tip: e.target.value as 'firma' | 'cari'})} disabled={!!duzenleCarId} className={`input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs font-semibold text-slate-800 ${duzenleCarId ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                                             <option value="firma">B2B Kurumsal Firma</option>
                                             <option value="cari">Bireysel Müşteri</option>
                                         </select>
                                     </div>
                                 </div>
-                                <div className="w-24 h-24 bg-white flex flex-col items-center justify-center text-slate-400 shrink-0" style={{ border: "1px solid var(--c-border)" }}>
+                                <div className="hidden md:flex w-24 h-24 bg-white flex-col items-center justify-center text-slate-400 shrink-0" style={{ border: "1px solid var(--c-border)" }}>
                                     <i className="fas fa-camera text-2xl mb-1"></i>
                                     <span className="text-[9px] text-center px-1 leading-tight">Resim Dosyası Yok</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex px-2 pt-2 shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
-                            <button onClick={() => setAktifSekme('genel')} className={aktifSekme === 'genel' ? 'btn-primary -mb-[1px]' : 'btn-secondary -mb-[1px]'}>1: Genel Bilgiler</button>
-                            <button onClick={() => setAktifSekme('iletisim')} className={aktifSekme === 'iletisim' ? 'btn-primary -mb-[1px]' : 'btn-secondary -mb-[1px]'}>2: İletişim ve Adres</button>
+                        <div className="flex px-2 pt-2 shrink-0 overflow-x-auto" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+                            <button onClick={() => setAktifSekme('genel')} className={`whitespace-nowrap text-sm md:text-xs ${aktifSekme === 'genel' ? 'btn-primary -mb-[1px]' : 'btn-secondary -mb-[1px]'}`}>1: Genel Bilgiler</button>
+                            <button onClick={() => setAktifSekme('iletisim')} className={`whitespace-nowrap text-sm md:text-xs ${aktifSekme === 'iletisim' ? 'btn-primary -mb-[1px]' : 'btn-secondary -mb-[1px]'}`}>2: İletişim ve Adres</button>
                         </div>
 
                         <div className="flex-1 bg-white p-4 overflow-y-auto">
                             {aktifSekme === 'genel' && (
-                                <div className="flex gap-8 max-w-4xl">
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Vergi Dairesi</label><input type="text" value={yeniCari.vergiDairesi} onChange={e=>setYeniCari({...yeniCari, vergiDairesi: e.target.value.toUpperCase()})} className="input-kurumsal flex-1 uppercase" /></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">V.D. No / T.C.</label><input type="text" value={yeniCari.vergiNo} onChange={e=>setYeniCari({...yeniCari, vergiNo: e.target.value})} className="input-kurumsal flex-1" /></div>
-                                        <div className="flex items-center pt-4" style={{ borderTop: "1px dashed var(--c-border)" }}><label className="w-28 text-right pr-2 text-orange-600 font-semibold text-[11px]">Açılış Bakiyesi</label><input type="number" min="0" value={yeniCari.bakiye} onChange={e=>setYeniCari({...yeniCari, bakiye: e.target.value})} className="input-kurumsal flex-1 font-semibold text-right" style={{ background: "#f8fafc" }} placeholder="0.00" /></div>
-                                        <div className="flex justify-end"><span className="text-[9px] text-slate-400">* Geçmişten devreden alacağınız varsa buraya yazınız.</span></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 max-w-4xl">
+                                    <div className="space-y-3 md:space-y-2">
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Vergi Dairesi</label><input type="text" value={yeniCari.vergiDairesi} onChange={e=>setYeniCari({...yeniCari, vergiDairesi: e.target.value.toUpperCase()})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs uppercase" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">V.D. No / T.C.</label><input type="text" value={yeniCari.vergiNo} onChange={e=>setYeniCari({...yeniCari, vergiNo: e.target.value})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0 pt-4" style={{ borderTop: "1px dashed var(--c-border)" }}><label className="text-left md:text-right md:w-28 md:pr-2 text-orange-600 font-semibold text-xs md:text-[11px]">Açılış Bakiyesi</label><input type="number" min="0" value={yeniCari.bakiye} onChange={e=>setYeniCari({...yeniCari, bakiye: e.target.value})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs font-semibold text-right" style={{ background: "#f8fafc" }} placeholder="0.00" /></div>
+                                        <div className="flex justify-end"><span className="text-[10px] md:text-[9px] text-slate-400">* Geçmişten devreden alacağınız varsa buraya yazınız.</span></div>
                                     </div>
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Grubu</label><select className="input-kurumsal flex-1"><option></option></select></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Sektörü</label><select className="input-kurumsal flex-1"><option></option></select></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Çalışma Şekli</label><select className="input-kurumsal flex-1"><option>Kredi</option><option>Peşin</option></select></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Vade (Gün)</label><input type="number" min="0" defaultValue="0" className="input-kurumsal w-16 text-right" /></div>
+                                    <div className="space-y-3 md:space-y-2">
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Grubu</label><select className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs"><option></option></select></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Sektörü</label><select className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs"><option></option></select></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Çalışma Şekli</label><select className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs"><option>Kredi</option><option>Peşin</option></select></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Vade (Gün)</label><input type="number" min="0" defaultValue="0" className="input-kurumsal w-full md:w-16 h-10 md:h-auto text-sm md:text-xs text-right" /></div>
                                     </div>
                                 </div>
                             )}
 
                             {aktifSekme === 'iletisim' && (
-                                <div className="flex gap-8 max-w-4xl">
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-start"><label className="w-28 text-right pr-2 mt-1 text-slate-500 font-semibold text-[11px]">Açık Adres</label><textarea value={yeniCari.adres} onChange={e=>setYeniCari({...yeniCari, adres: e.target.value})} className="input-kurumsal flex-1 h-16 resize-none" /></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">İl</label><input type="text" value={yeniCari.il} onChange={e=>setYeniCari({...yeniCari, il: e.target.value.toUpperCase()})} className="input-kurumsal flex-1 uppercase" /></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">İlçe</label><input type="text" value={yeniCari.ilce} onChange={e=>setYeniCari({...yeniCari, ilce: e.target.value.toUpperCase()})} className="input-kurumsal flex-1 uppercase" /></div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 max-w-4xl">
+                                    <div className="space-y-3 md:space-y-2">
+                                        <div className="flex flex-col md:flex-row md:items-start gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 md:mt-1 text-slate-500 font-semibold text-xs md:text-[11px]">Açık Adres</label><textarea value={yeniCari.adres} onChange={e=>setYeniCari({...yeniCari, adres: e.target.value})} className="input-kurumsal w-full md:flex-1 h-20 md:h-16 text-sm md:text-xs resize-none" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">İl</label><input type="text" value={yeniCari.il} onChange={e=>setYeniCari({...yeniCari, il: e.target.value.toUpperCase()})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs uppercase" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">İlçe</label><input type="text" value={yeniCari.ilce} onChange={e=>setYeniCari({...yeniCari, ilce: e.target.value.toUpperCase()})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs uppercase" /></div>
                                     </div>
-                                    <div className="flex-1 space-y-2">
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Telefon 1 (Gsm)</label><input type="text" value={yeniCari.telefon} onChange={e=>setYeniCari({...yeniCari, telefon: e.target.value})} className="input-kurumsal flex-1" placeholder="05XX XXX XX XX" /></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">Telefon 2</label><input type="text" value={yeniCari.telefon2} onChange={e=>setYeniCari({...yeniCari, telefon2: e.target.value})} className="input-kurumsal flex-1" /></div>
-                                        <div className="flex items-center"><label className="w-28 text-right pr-2 text-slate-500 font-semibold text-[11px]">E-Mail</label><input type="email" value={yeniCari.email} onChange={e=>setYeniCari({...yeniCari, email: e.target.value})} className="input-kurumsal flex-1" /></div>
+                                    <div className="space-y-3 md:space-y-2">
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Telefon 1 (Gsm)</label><input type="text" value={yeniCari.telefon} onChange={e=>setYeniCari({...yeniCari, telefon: e.target.value})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs" placeholder="05XX XXX XX XX" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">Telefon 2</label><input type="text" value={yeniCari.telefon2} onChange={e=>setYeniCari({...yeniCari, telefon2: e.target.value})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs" /></div>
+                                        <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-0"><label className="text-left md:text-right md:w-28 md:pr-2 text-slate-500 font-semibold text-xs md:text-[11px]">E-Mail</label><input type="email" value={yeniCari.email} onChange={e=>setYeniCari({...yeniCari, email: e.target.value})} className="input-kurumsal w-full md:flex-1 h-10 md:h-auto text-sm md:text-xs" /></div>
                                     </div>
                                 </div>
                             )}
