@@ -309,7 +309,7 @@ export default function TahsilatErpSayfasi() {
                             </div>
                         </div>
 
-                        <div className="card-kurumsal p-3 space-y-2">
+                        <div className="card-kurumsal p-3 space-y-2 hidden md:block">
                             <div>
                                 <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">Proje</label>
                                 <input type="text" value={evrak.proje} onChange={(e) => setEvrak({...evrak, proje: e.target.value})} className="input-kurumsal w-full text-sm" />
@@ -321,9 +321,9 @@ export default function TahsilatErpSayfasi() {
                         </div>
                     </div>
 
-                    <div className="mt-2 max-w-6xl flex items-center">
-                        <label className="w-24 text-right pr-2 text-slate-500 font-semibold">Genel Açıklama</label>
-                        <input type="text" value={evrak.aciklama} onChange={(e) => setEvrak({...evrak, aciklama: e.target.value})} className="input-kurumsal flex-1" placeholder="Evrak geneli için açıklama giriniz..." />
+                    <div className="mt-2 max-w-6xl flex flex-col md:flex-row md:items-center gap-1 md:gap-0">
+                        <label className="md:w-24 md:text-right md:pr-2 text-slate-500 font-semibold text-[11px]">Genel Açıklama</label>
+                        <input type="text" value={evrak.aciklama} onChange={(e) => setEvrak({...evrak, aciklama: e.target.value})} className="input-kurumsal w-full md:flex-1" placeholder="Evrak geneli için açıklama giriniz..." />
                     </div>
                 </div>
 
@@ -331,7 +331,8 @@ export default function TahsilatErpSayfasi() {
                     <div className="px-4 py-1.5 bg-white -mb-[1px] font-semibold text-[#1d4ed8] z-10 cursor-pointer" style={{ border: "1px solid var(--c-border)", borderBottom: "1px solid white" }}>Kayıt Bilgileri (Kalemler)</div>
                 </div>
 
-                <div className="flex-1 bg-white mx-2 mb-2 relative overflow-x-auto overflow-y-auto" style={{ border: "1px solid var(--c-border)" }}>
+                {/* Desktop Tablo */}
+                <div className="flex-1 bg-white mx-2 mb-2 relative overflow-x-auto overflow-y-auto hidden md:block" style={{ border: "1px solid var(--c-border)" }}>
                     <table className="tbl-kurumsal min-w-[800px]">
                         <thead>
                             <tr>
@@ -363,19 +364,18 @@ export default function TahsilatErpSayfasi() {
                                     <td className="p-0">
                                         <input type="text" value={kalem.adi} onChange={(e) => kalemGuncelle(kalem.id, "adi", e.target.value.toUpperCase())} className="w-full h-full p-1.5 bg-transparent outline-none text-red-700 font-semibold focus:bg-white uppercase" />
                                     </td>
-
                                     <td className="p-0">
                                         <input
                                             type="text"
+                                            inputMode="decimal"
                                             value={kalem.tutar}
-                                            onFocus={handleTutarFocus}
+                                            onFocus={(e) => { handleTutarFocus(e); e.target.select(); }}
                                             onChange={(e) => kalemGuncelle(kalem.id, "tutar", e.target.value)}
                                             onBlur={(e) => handleTutarBlur(kalem.id, e.target.value)}
                                             className={`w-full h-full p-1.5 bg-transparent outline-none text-right font-semibold focus:bg-white ${evrak.islemTipi === 'Tahsilat' ? 'text-emerald-700' : 'text-blue-700'}`}
                                             placeholder="0,00"
                                         />
                                     </td>
-
                                     <td className="p-0">
                                         <input disabled type="text" value="1,00" className="w-full h-full p-1.5 outline-none text-right text-slate-500 font-semibold" style={{ background: "#f8fafc" }} />
                                     </td>
@@ -389,6 +389,57 @@ export default function TahsilatErpSayfasi() {
                             ))}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Mobil Kart Görünümü */}
+                <div className="flex-1 mx-2 mb-2 overflow-y-auto space-y-2 md:hidden">
+                    {kalemler.map((kalem, i) => (
+                        <div key={kalem.id} className="bg-white p-3 space-y-2" style={{ border: "1px solid var(--c-border)" }}>
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-slate-400">KALEM {i + 1}</span>
+                                <button onClick={() => kalemSil(kalem.id)} className="text-[#dc2626] hover:text-red-700 p-1"><i className="fas fa-trash text-xs"></i></button>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">Ödeme Cinsi</label>
+                                <select value={kalem.cinsi} onChange={(e) => kalemGuncelle(kalem.id, "cinsi", e.target.value)} className="input-kurumsal w-full text-red-700 font-semibold">
+                                    <option value="Nakit">Nakit</option>
+                                    <option value="Kredi Kartı">Kredi Kartı</option>
+                                    <option value="Havale/EFT">Havale/EFT</option>
+                                    <option value="Çek">Çek / Senet</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">Kasa / Banka Adı</label>
+                                <input type="text" value={kalem.adi} onChange={(e) => kalemGuncelle(kalem.id, "adi", e.target.value.toUpperCase())} className="input-kurumsal w-full text-red-700 font-semibold uppercase" />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">TL Tutar</label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={kalem.tutar}
+                                    onFocus={(e) => { handleTutarFocus(e); e.target.select(); }}
+                                    onChange={(e) => kalemGuncelle(kalem.id, "tutar", e.target.value)}
+                                    onBlur={(e) => handleTutarBlur(kalem.id, e.target.value)}
+                                    className={`input-kurumsal w-full h-12 text-lg text-right font-bold ${evrak.islemTipi === 'Tahsilat' ? 'text-emerald-700' : 'text-blue-700'}`}
+                                    placeholder="0,00"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">Döviz Kuru</label>
+                                    <input disabled type="text" value="1,00" className="input-kurumsal w-full text-right text-slate-500 font-semibold" style={{ background: "#f8fafc" }} />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-semibold text-slate-500 uppercase block mb-1">Açıklama</label>
+                                    <input type="text" value={kalem.aciklama} onChange={(e) => kalemGuncelle(kalem.id, "aciklama", e.target.value)} className="input-kurumsal w-full" />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    <button onClick={kalemEkle} className="w-full py-3 bg-[#1d4ed8] text-white font-bold text-sm flex items-center justify-center gap-2 active:bg-[#1e40af] transition-colors">
+                        <i className="fas fa-plus"></i> Yeni Kalem Ekle
+                    </button>
                 </div>
 
                 <div className="h-auto sm:h-16 shrink-0 flex flex-col sm:flex-row items-center justify-between px-4 py-2 sm:py-0 gap-2 sm:gap-0" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
