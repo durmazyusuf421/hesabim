@@ -37,7 +37,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(while read:*)"
+      "Bash(while read:*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
