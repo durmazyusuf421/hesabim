@@ -6,6 +6,7 @@ import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
 import { bildirimEkle } from "@/app/lib/bildirim";
 import { excelExport, pdfExport } from "@/app/lib/export";
+import { useBirimler } from "@/app/lib/useBirimler";
 interface Siparis {
     id: number;
     siparis_no: string;
@@ -61,6 +62,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     const [plasiyerler, setPlasiyerler] = useState<{id:number;ad_soyad:string}[]>([]);
     const [seciliPlasiyerId, setSeciliPlasiyerId] = useState<string>("");
     const [dovizKurlari, setDovizKurlari] = useState<Record<string, number>>({});
+    const { birimler: birimListesi } = useBirimler();
     // --- ŞABLON STATELERİ ---
     const [sablonModalAcik, setSablonModalAcik] = useState(false);
     const [sablonlar, setSablonlar] = useState<{id:number;sablon_adi:string;firma_id:number|null;kalem_sayisi?:number}[]>([]);
@@ -757,7 +759,7 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
                                                 </select>
                                             </td>
                                             <td>
-                                                <input type="text" value={kalem.birim} onChange={(e) => kalemGuncelle(index, 'birim', e.target.value)} className="input-kurumsal w-full text-center" />
+                                                <select value={kalem.birim} onChange={(e) => kalemGuncelle(index, 'birim', e.target.value)} className="input-kurumsal w-full text-center cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{kalem.birim && !birimListesi.some(b => b.kisaltma === kalem.birim) && <option value={kalem.birim}>{kalem.birim}</option>}</select>
                                             </td>
                                             <td>
                                                 <input type="number" min={1} value={kalem.miktar} onChange={(e) => kalemGuncelle(index, 'miktar', Number(e.target.value))} className="input-kurumsal w-full text-center" />

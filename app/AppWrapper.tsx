@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/app/lib/useAuth";
 import { supabase } from "@/app/lib/supabase";
 import { bildirimEkle } from "@/app/lib/bildirim";
+import { useBirimler } from "@/app/lib/useBirimler";
 
 interface MenuItem {
     href: string;
@@ -87,6 +88,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     // Bildirim sistemi
     const [bildirimler, setBildirimler] = useState<{id:number;baslik:string;mesaj:string;tip:string;kaynak:string|null;kaynak_id:number|null;okundu:boolean;created_at:string}[]>([]);
     const [bildirimPanelAcik, setBildirimPanelAcik] = useState(false);
+    // Birimler global yükleme (uygulama açılışında bir kez fetch)
+    useBirimler();
 
     useEffect(() => {
         setIsMounted(true);

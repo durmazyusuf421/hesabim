@@ -1,10 +1,12 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase, faturaNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
+import { useBirimler } from "@/app/lib/useBirimler";
 interface FaturaKalemi { urun_adi: string; miktar: number; birim: string; birim_fiyat: number; kdv_orani: number; }
+interface StokUrun { id: number; urun_adi: string; birim: string; satis_fiyati: number; kdv_orani: number; }
 interface FaturaFormState { fatura_no: string; tarih: string; cari_id: string; }
 interface FaturaRecord {
   id: number;
@@ -45,6 +47,14 @@ export default function FaturaMerkezi() {
   const [faturaForm, setFaturaForm] = useState<FaturaFormState>({ fatura_no: "", tarih: new Date().toISOString().split('T')[0], cari_id: "" });
   const [faturaKalemleri, setFaturaKalemleri] = useState<FaturaKalemi[]>([]);
   const [yazdirModalAcik, setYazdirModalAcik] = useState(false);
+  const { birimler: birimListesi } = useBirimler();
+
+  // SATIR İÇİ STOK ARAMA (AUTOCOMPLETE)
+  const [acikAutoIndex, setAcikAutoIndex] = useState<number>(-1);
+  const [autoSonuclar, setAutoSonuclar] = useState<StokUrun[]>([]);
+  const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoWrapperRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const urunAdiInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
@@ -53,6 +63,7 @@ export default function FaturaMerkezi() {
 
       const { data: faturaData } = await supabase.from("faturalar").select("*").eq("sirket_id", sirketId).order('id', { ascending: false });
       setFaturalar(faturaData || []);
+
       setYukleniyor(false);
   }
 
@@ -142,6 +153,43 @@ export default function FaturaMerkezi() {
       setFaturaKalemleri(yeni);
   };
   const satirSil = (index: number) => setFaturaKalemleri(faturaKalemleri.filter((_, i) => i !== index));
+
+  // SATIR İÇİ AUTOCOMPLETE
+  const urunAdiDegisti = (index: number, value: string) => {
+      satirGuncelle(index, "urun_adi", value);
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+      if (!aktifSirket || value.trim().length < 1) { setAutoSonuclar([]); setAcikAutoIndex(-1); return; }
+      setAcikAutoIndex(index);
+      autoTimerRef.current = setTimeout(async () => {
+          const { data } = await supabase.from("urunler")
+              .select("id, urun_adi, birim, satis_fiyati, kdv_orani")
+              .eq("sahip_sirket_id", aktifSirket.id)
+              .neq("aktif", false)
+              .ilike("urun_adi", `%${value.trim()}%`)
+              .limit(10)
+              .order("urun_adi");
+          setAutoSonuclar(data || []);
+      }, 300);
+  };
+
+  const autoUrunSec = (index: number, urun: StokUrun) => {
+      const yeni = [...faturaKalemleri];
+      yeni[index] = { ...yeni[index], urun_adi: urun.urun_adi, birim: urun.birim, birim_fiyat: urun.satis_fiyati, kdv_orani: urun.kdv_orani };
+      setFaturaKalemleri(yeni);
+      setAcikAutoIndex(-1);
+      setAutoSonuclar([]);
+  };
+
+  // Dışarı tıklayınca dropdown kapat
+  useEffect(() => {
+      if (acikAutoIndex === -1) return;
+      const handleClick = (e: MouseEvent) => {
+          const wrapper = autoWrapperRefs.current.get(acikAutoIndex);
+          if (wrapper && !wrapper.contains(e.target as Node)) { setAcikAutoIndex(-1); setAutoSonuclar([]); }
+      };
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+  }, [acikAutoIndex]);
 
   // HESAPLAMALAR (KDV DAHİL)
   const araToplamHesapla = () => faturaKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
@@ -393,7 +441,7 @@ export default function FaturaMerkezi() {
                             <th className="w-24 text-center">Miktar</th>
                             <th className="w-20 text-center">Birim</th>
                             <th className="w-32 text-right">Birim Fiyat</th>
-                            <th className="w-16 text-center">KDV %</th>
+                            <th className="w-16 text-center hidden md:table-cell">KDV %</th>
                             <th className="w-32 text-right">KDV&apos;li Tutar</th>
                             {modalMod === "duzenle" && <th className="w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>}
                         </tr>
@@ -405,11 +453,34 @@ export default function FaturaMerkezi() {
                             return (
                                 <tr key={index} className="hover:bg-[#f8fafc] focus-within:bg-[#f8fafc] transition-colors">
                                     <td className="text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-semibold text-slate-800" : "p-0"}`}>{modalMod === "goruntule" ? item.urun_adi : <input value={item.urun_adi} onChange={(e) => satirGuncelle(index, "urun_adi", e.target.value)} placeholder="Stok veya Hizmet yazın" className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" />}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`}>{modalMod === "goruntule" ? item.miktar : <input type="number" min="1" value={item.miktar} onChange={(e) => satirGuncelle(index, "miktar", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <input type="text" value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white uppercase" />}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? Number(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2}) : <input type="number" min="0" value={item.birim_fiyat} onChange={(e) => satirGuncelle(index, "birim_fiyat", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center text-orange-600" : "p-0"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <input type="number" min="0" value={item.kdv_orani} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="w-full px-2 py-1.5 text-[11px] font-bold text-center text-orange-600 outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-semibold text-slate-800" : "p-0 relative"}`}>
+                                        {modalMod === "goruntule" ? item.urun_adi : (
+                                            <div ref={(el) => { if (el) autoWrapperRefs.current.set(index, el); else autoWrapperRefs.current.delete(index); }} className="relative">
+                                                <input
+                                                    ref={(el) => { if (el) urunAdiInputRefs.current.set(index, el); else urunAdiInputRefs.current.delete(index); }}
+                                                    value={item.urun_adi}
+                                                    onChange={(e) => urunAdiDegisti(index, e.target.value)}
+                                                    onFocus={() => { if (item.urun_adi.trim().length >= 1) urunAdiDegisti(index, item.urun_adi); }}
+                                                    placeholder="Ürün veya hizmet adı yazın..."
+                                                    className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white"
+                                                />
+                                                {acikAutoIndex === index && autoSonuclar.length > 0 && (
+                                                    <div className="absolute left-0 right-0 top-full bg-white shadow-lg border overflow-auto" style={{ zIndex: 90, maxHeight: "200px", borderColor: "var(--c-border)" }}>
+                                                        {autoSonuclar.map(urun => (
+                                                            <button key={urun.id} onClick={() => autoUrunSec(index, urun)} className="w-full text-left px-2.5 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                                                <span className="text-[11px] font-bold text-slate-800 truncate">{urun.urun_adi}</span>
+                                                                <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">{Number(urun.satis_fiyati).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL / {urun.birim}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`}>{modalMod === "goruntule" ? item.miktar : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.miktar} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val === '' ? 0 : Number(val)); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-1 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? Number(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.birim_fiyat} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val === '' ? 0 : Number(val)); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`hidden md:table-cell ${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2})}</td>
                                     {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
                                 </tr>

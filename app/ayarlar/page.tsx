@@ -5,6 +5,7 @@ import { useAuth } from "@/app/lib/useAuth";
 import Link from "next/link";
 import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
+import { useBirimler } from "@/app/lib/useBirimler";
 interface Personel {
     id: number;
     ad_soyad: string;
@@ -20,6 +21,9 @@ interface FirmaDataState {
 interface PersonelFormState {
     ad_soyad: string; eposta: string; sifre: string; roller: string[];
 }
+interface BirimRow {
+    id: number; sirket_id?: number; birim_adi: string; kisaltma: string; aktif: boolean;
+}
 
 export default function AyarlarEkrani() {
   const toast = useToast();
@@ -28,7 +32,7 @@ export default function AyarlarEkrani() {
 
   const [yukleniyor, setYukleniyor] = useState(true);
   const [kaydediliyor, setKaydediliyor] = useState(false);
-  const [aktifSekme, setAktifSekme] = useState<"FIRMA" | "PERSONEL" | "DOVIZ" | "ABONELIK">("FIRMA");
+  const [aktifSekme, setAktifSekme] = useState<"FIRMA" | "PERSONEL" | "DOVIZ" | "BIRIMLER" | "ABONELIK">("FIRMA");
   const [dovizUSD, setDovizUSD] = useState("");
   const [dovizEUR, setDovizEUR] = useState("");
   const [dovizSonGuncelleme, setDovizSonGuncelleme] = useState("");
@@ -54,6 +58,12 @@ export default function AyarlarEkrani() {
       ad_soyad: "", eposta: "", sifre: "", roller: ["PLASIYER"]
   });
 
+  // BİRİMLER
+  const { yenile: birimCacheYenile } = useBirimler();
+  const [birimler, setBirimler] = useState<BirimRow[]>([]);
+  const [yeniBirimAdi, setYeniBirimAdi] = useState("");
+  const [yeniBirimKisaltma, setYeniBirimKisaltma] = useState("");
+
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
       const { data } = await supabase.from("sirketler").select("*").eq("id", sirketId).single();
@@ -71,6 +81,11 @@ export default function AyarlarEkrani() {
       setPersoneller(data || []);
   }
 
+  async function birimleriGetir(sirketId: number) {
+      const { data } = await supabase.from("birimler").select("*").eq("sirket_id", sirketId).order('birim_adi');
+      setBirimler(data || []);
+  }
+
   useEffect(() => {
     if (!aktifSirket) return;
 
@@ -78,6 +93,7 @@ export default function AyarlarEkrani() {
     if (kullaniciRol.includes("YONETICI")) {
         verileriGetir(aktifSirket.id);
         personelleriGetir(aktifSirket.id);
+        birimleriGetir(aktifSirket.id);
         // Ana Depo otomatik oluştur
         supabase.from("depolar").select("id").eq("sirket_id", aktifSirket.id).limit(1).then(async ({ data }) => {
             if (!data || data.length === 0) {
@@ -182,6 +198,60 @@ export default function AyarlarEkrani() {
       });
   };
 
+  const birimEkle = async () => {
+      if (!aktifSirket || !yeniBirimAdi.trim()) { toast.error("Birim adı zorunludur!"); return; }
+      const { error } = await supabase.from("birimler").insert({ sirket_id: aktifSirket.id, birim_adi: yeniBirimAdi.trim(), kisaltma: yeniBirimKisaltma.trim() || yeniBirimAdi.trim() });
+      if (error) { toast.error("Birim eklenemedi: " + error.message); return; }
+      toast.success("Birim eklendi.");
+      setYeniBirimAdi(""); setYeniBirimKisaltma("");
+      birimleriGetir(aktifSirket.id);
+      birimCacheYenile();
+  };
+
+  const birimSil = async (birim: BirimRow) => {
+      if (!aktifSirket) return;
+      // Kullanım kontrolü
+      const [{ count: c1 }, { count: c2 }] = await Promise.all([
+          supabase.from("urunler").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", aktifSirket.id).eq("birim", birim.kisaltma),
+          supabase.from("fatura_detaylari").select("id", { count: "exact", head: true }).eq("birim", birim.kisaltma),
+      ]);
+      if ((c1 || 0) > 0 || (c2 || 0) > 0) { toast.error(`"${birim.birim_adi}" birimi stok veya faturalarda kullanıldığı için silinemez!`); return; }
+      onayla({
+          baslik: "Birim Sil", mesaj: `"${birim.birim_adi}" birimini silmek istediğinize emin misiniz?`, onayMetni: "Sil", tehlikeli: true,
+          onOnayla: async () => {
+              await supabase.from("birimler").delete().eq("id", birim.id);
+              birimleriGetir(aktifSirket.id);
+              birimCacheYenile();
+          }
+      });
+  };
+
+  const birimAktifToggle = async (birim: BirimRow) => {
+      if (!aktifSirket) return;
+      await supabase.from("birimler").update({ aktif: !birim.aktif }).eq("id", birim.id);
+      birimleriGetir(aktifSirket.id);
+      birimCacheYenile();
+  };
+
+  const varsayilanBirimlerYukle = async () => {
+      if (!aktifSirket) return;
+      const varsayilanlar = [
+          { birim_adi: "Adet", kisaltma: "Adet" }, { birim_adi: "Kilogram", kisaltma: "Kg" },
+          { birim_adi: "Litre", kisaltma: "Lt" }, { birim_adi: "Metre", kisaltma: "Mt" },
+          { birim_adi: "Koli", kisaltma: "Koli" }, { birim_adi: "Paket", kisaltma: "Paket" },
+          { birim_adi: "Ton", kisaltma: "Ton" }, { birim_adi: "Kutu", kisaltma: "Kutu" },
+          { birim_adi: "Çuval", kisaltma: "Çuval" }, { birim_adi: "Gram", kisaltma: "Gr" },
+      ];
+      const mevcutKisaltmalar = new Set(birimler.map(b => b.kisaltma));
+      const eklenecekler = varsayilanlar.filter(v => !mevcutKisaltmalar.has(v.kisaltma)).map(v => ({ ...v, sirket_id: aktifSirket.id }));
+      if (eklenecekler.length === 0) { toast.info("Tüm varsayılan birimler zaten mevcut."); return; }
+      const { error } = await supabase.from("birimler").insert(eklenecekler);
+      if (error) { toast.error("Birimler eklenemedi: " + error.message); return; }
+      toast.success(`${eklenecekler.length} varsayılan birim eklendi.`);
+      birimleriGetir(aktifSirket.id);
+      birimCacheYenile();
+  };
+
   if (!aktifSirket || yukleniyor) return <div className="h-full flex items-center justify-center font-semibold text-slate-500" style={{ background: "var(--c-bg)" }}>Sistem Doğrulanıyor...</div>;
 
   return (
@@ -210,6 +280,7 @@ export default function AyarlarEkrani() {
                         <div className="flex gap-2 overflow-x-auto custom-scrollbar">
                             <button onClick={() => setAktifSekme("FIRMA")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "FIRMA" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Firma Bilgileri</button>
                             <button onClick={() => setAktifSekme("PERSONEL")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "PERSONEL" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Personeller & Yetkiler</button>
+                            <button onClick={() => setAktifSekme("BIRIMLER")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "BIRIMLER" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Birimler</button>
                             <button onClick={() => setAktifSekme("DOVIZ")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "DOVIZ" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Döviz Kurları</button>
                             <button onClick={() => setAktifSekme("ABONELIK")} className={`px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-all whitespace-nowrap ${aktifSekme === "ABONELIK" ? 'bg-[#0f172a] text-white' : 'bg-white text-[#475569] border border-[var(--c-border)]'}`}>Abonelik</button>
                         </div>
@@ -297,6 +368,64 @@ export default function AyarlarEkrani() {
                                         )}
                                     </tbody>
                                 </table>
+                            </div>
+                        )}
+                        {aktifSekme === "BIRIMLER" && (
+                            <div className="p-4 md:p-8 animate-in fade-in">
+                                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-[#1d4ed8] uppercase tracking-widest flex items-center"><i className="fas fa-ruler mr-2"></i> Birim Yönetimi</h3>
+                                        <p className="text-[10px] text-slate-400 mt-1">Stok kartlarında ve faturalarda kullanılacak birimleri yönetin.</p>
+                                    </div>
+                                    <button onClick={varsayilanBirimlerYukle} className="btn-secondary text-xs flex items-center gap-2 shrink-0">
+                                        <i className="fas fa-download text-[9px]"></i> Varsayılanları Yükle
+                                    </button>
+                                </div>
+
+                                {/* Yeni Birim Ekle */}
+                                <div className="flex flex-col sm:flex-row gap-2 mb-6 p-3 border border-[var(--c-border)]" style={{ background: "#f8fafc" }}>
+                                    <input type="text" value={yeniBirimAdi} onChange={(e) => setYeniBirimAdi(e.target.value)} placeholder="Birim adı (ör: Kilogram)" className="input-kurumsal flex-1" />
+                                    <input type="text" value={yeniBirimKisaltma} onChange={(e) => setYeniBirimKisaltma(e.target.value)} placeholder="Kısaltma (ör: Kg)" className="input-kurumsal w-full sm:w-32" />
+                                    <button onClick={birimEkle} className="btn-primary flex items-center justify-center gap-2 shrink-0">
+                                        <i className="fas fa-plus text-[9px]"></i> Ekle
+                                    </button>
+                                </div>
+
+                                {/* Birim Listesi */}
+                                {birimler.length === 0 ? (
+                                    <div className="p-10 text-center text-slate-400 font-semibold uppercase tracking-widest border border-dashed border-[var(--c-border)]">
+                                        Henüz birim tanımlanmamış. &quot;Varsayılanları Yükle&quot; butonuna tıklayın.
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="tbl-kurumsal w-full">
+                                            <thead>
+                                                <tr className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
+                                                    <th className="p-3">Birim Adı</th>
+                                                    <th className="p-3 w-32">Kısaltma</th>
+                                                    <th className="p-3 w-24 text-center">Durum</th>
+                                                    <th className="p-3 w-24 text-center">İşlem</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {birimler.map(b => (
+                                                    <tr key={b.id} className="border-b border-[var(--c-border)] hover:bg-[#f8fafc] transition-colors">
+                                                        <td className="p-3 font-semibold text-slate-800">{b.birim_adi}</td>
+                                                        <td className="p-3 font-bold text-[#1d4ed8]">{b.kisaltma}</td>
+                                                        <td className="p-3 text-center">
+                                                            <button onClick={() => birimAktifToggle(b)} className={`px-2 py-0.5 text-[10px] font-bold border transition-colors ${b.aktif ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'}`}>
+                                                                <i className={`fas ${b.aktif ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`} />{b.aktif ? 'Aktif' : 'Pasif'}
+                                                            </button>
+                                                        </td>
+                                                        <td className="p-3 text-center">
+                                                            <button onClick={() => birimSil(b)} className="w-8 h-8 bg-white border border-[var(--c-border)] text-[#dc2626] hover:bg-red-50 hover:border-red-200 transition-all" title="Sil"><i className="fas fa-trash"></i></button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
                         )}
                         {aktifSekme === "DOVIZ" && (

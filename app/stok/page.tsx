@@ -6,6 +6,7 @@ import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
 import Link from "next/link";
 import { excelExport, pdfExport } from "@/app/lib/export";
+import { useBirimler } from "@/app/lib/useBirimler";
 interface Urun {
     id: number; urun_adi: string; barkod?: string; stok_miktari: number;
     birim: string; alis_fiyati: number; satis_fiyati: number; kdv_orani: number;
@@ -75,6 +76,7 @@ export default function StokKartlari() {
   const [transferKaynakDepo, setTransferKaynakDepo] = useState<string>("");
   const [transferHedefDepo, setTransferHedefDepo] = useState<string>("");
   const [transferMiktar, setTransferMiktar] = useState("");
+  const { birimler: birimListesi } = useBirimler();
 
   const [formData, setFormData] = useState<FormDataState>({
       urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
@@ -590,20 +592,9 @@ export default function StokKartlari() {
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Satış Birimi</label>
                         <select value={formData.birim} onChange={(e) => setFormData({...formData, birim: e.target.value})} className="input-kurumsal w-full cursor-pointer">
-                            <option value="Adet">Adet</option>
-                            <option value="Kg">Kg</option>
-                            <option value="Koli">Koli</option>
-                            <option value="Kasa">Kasa</option>
-                            <option value="Paket">Paket</option>
-                            <option value="Metre">Metre</option>
-                            <option value="Litre">Litre</option>
-                            <option value="Ton">Ton</option>
-                            <option value="Palet">Palet</option>
-                            <option value="Düzine">Düzine</option>
-                            <option value="Çift">Çift</option>
-                            <option value="Kutu">Kutu</option>
-                            <option value="Top">Top</option>
-                            <option value="Rulo">Rulo</option>
+                            <option value="">-- Birim Seçin --</option>
+                            {birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma} ({b.birim_adi})</option>)}
+                            {formData.birim && !birimListesi.some(b => b.kisaltma === formData.birim) && <option value={formData.birim}>{formData.birim}</option>}
                         </select>
                     </div>
                 </div>
