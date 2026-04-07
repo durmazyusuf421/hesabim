@@ -58,42 +58,39 @@ export async function siparisNoUret(prefix: "SIP" | "POS" = "SIP"): Promise<stri
   return `${onEk}${Date.now().toString().slice(-4)}`;
 }
 
-export async function faturaNoUret(): Promise<string> {
+export async function faturaNoUret(sirketId: number): Promise<string> {
   const bugun = new Date();
-  const tarihStr = bugun.getFullYear().toString() +
-    (bugun.getMonth() + 1).toString().padStart(2, "0") +
-    bugun.getDate().toString().padStart(2, "0");
+  const yil = bugun.getFullYear();
+  const ay = String(bugun.getMonth() + 1).padStart(2, '0');
+  const gun = String(bugun.getDate()).padStart(2, '0');
+  const tarihStr = `${yil}${ay}${gun}`;
 
-  const onEk = `FAT-${tarihStr}-`;
+  // Bugünkü en yüksek sıra numarasını bul
+  const { data } = await supabase
+    .from('faturalar')
+    .select('fatura_no')
+    .like('fatura_no', `FAT-${tarihStr}-%`)
+    .order('fatura_no', { ascending: false })
+    .limit(1);
 
-  for (let deneme = 0; deneme < 3; deneme++) {
-    const { data } = await supabase
-      .from("faturalar")
-      .select("fatura_no")
-      .like("fatura_no", `${onEk}%`)
-      .order("fatura_no", { ascending: false })
-      .limit(1);
-
-    let sira = 1;
-    if (data && data.length > 0) {
-      const sonNo = data[0].fatura_no as string;
-      const sonSira = parseInt(sonNo.split("-").pop() || "0", 10);
-      if (!isNaN(sonSira)) sira = sonSira + 1;
-    }
-
-    const yeniNo = `${onEk}${sira.toString().padStart(3, "0")}`;
-
-    const { data: kontrol } = await supabase
-      .from("faturalar")
-      .select("id")
-      .eq("fatura_no", yeniNo)
-      .limit(1);
-
-    if (!kontrol || kontrol.length === 0) {
-      return yeniNo;
-    }
-    await new Promise(r => setTimeout(r, 100));
+  let sira = 1;
+  if (data && data.length > 0) {
+    const sonNo = data[0].fatura_no;
+    const parcalar = sonNo.split('-');
+    sira = parseInt(parcalar[parcalar.length - 1]) + 1;
   }
 
-  return `${onEk}${Date.now().toString().slice(-4)}`;
+  // 3 deneme yap
+  for (let i = 0; i < 3; i++) {
+    const no = `FAT-${tarihStr}-${String(sira + i).padStart(3, '0')}`;
+    const { data: kontrol } = await supabase
+      .from('faturalar')
+      .select('id')
+      .eq('fatura_no', no)
+      .single();
+    if (!kontrol) return no;
+  }
+
+  // Son çare: timestamp
+  return `FAT-${tarihStr}-${Date.now().toString().slice(-6)}`;
 }

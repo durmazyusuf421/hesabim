@@ -64,7 +64,7 @@ export default function TahsilatErpSayfasi() {
 
     useEffect(() => {
         if (!aktifSirket) return;
-        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/portal"; return; }
+        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
         verileriGetir(aktifSirket.id);
 
         // Iyzico callback sonrası URL parametrelerini kontrol et

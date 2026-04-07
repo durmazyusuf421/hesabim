@@ -81,7 +81,7 @@ export default function FaturaMerkezi() {
       setModalMod("duzenle");
       setFaturaTipi(tip);
       setSeciliFaturaId(null);
-      const yeniNo = await faturaNoUret();
+      const yeniNo = await faturaNoUret(aktifSirket!.id);
       setFaturaForm({ fatura_no: yeniNo, tarih: new Date().toISOString().split('T')[0], cari_id: "" });
       setFaturaKalemleri([{ urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
       setModalAcik(true);

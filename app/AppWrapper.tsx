@@ -63,7 +63,8 @@ const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
     "/faturalar": { baslik: "Faturalar", alt: "e-Fatura ve e-Arşiv yönetimi" },
     "/stok": { baslik: "Stok Kartları", alt: "Ürün ve envanter yönetimi" },
     "/stok-hareketleri": { baslik: "Stok Hareketleri", alt: "Giriş / çıkış kayıtları" },
-    "/stok/sayim": { baslik: "Stok Sayımı", alt: "Fiziksel stok sayımı ve fark tespiti" },
+    "/stok/sayim": { baslik: "Stok Sayımı", alt: "Envanter sayım yönetimi" },
+    "/stok/toplu-fiyat": { baslik: "Toplu Fiyat", alt: "Toplu fiyat güncelleme" },
     "/cari": { baslik: "Cari Kartları", alt: "Müşteri ve tedarikçi hesapları" },
     "/ekstre": { baslik: "Cari Hareketler", alt: "Hesap ekstresi ve yürüyen bakiye" },
     "/raporlar": { baslik: "Raporlar", alt: "Satış, tahsilat ve performans analizleri" },
@@ -121,7 +122,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     }, [aktifSirket]);
 
     useEffect(() => {
-        if (!aktifSirket || aktifSirket.rol !== "TOPTANCI") return;
+        if (!aktifSirket) return;
         async function b2bSayisiniGetir() {
             const { count } = await supabase.from("b2b_baglantilar").select("id", { count: "exact", head: true }).eq("toptanci_id", aktifSirket!.id).eq("durum", "BEKLIYOR");
             setBekleyenB2B(count || 0);
