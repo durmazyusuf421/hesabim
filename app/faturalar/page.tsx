@@ -591,22 +591,20 @@ export default function FaturaMerkezi() {
               </div>
             </div>
 
-            <div className="p-4 bg-white shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--c-border)" }}>
-                <div className="flex flex-col sm:flex-row gap-4 min-w-[500px]">
-                    <div className="flex-1 space-y-2">
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f8fafc] cursor-default" : ""}`} /></div>
-                        <div className="flex items-center"><label className="w-24 text-xs font-bold text-slate-700">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f8fafc] cursor-default" : ""}`} /></div>
-                        <div className="flex items-center">
-                            <label className="w-24 text-xs font-bold text-slate-700">Cari Hesap</label>
-                            {modalMod === "goruntule" ? (
-                                <input type="text" disabled value={firmalar.find(f => f.id === Number(faturaForm.cari_id))?.unvan || "-"} className="input-kurumsal flex-1 bg-[#f8fafc] cursor-default" />
-                            ) : (
-                                <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="input-kurumsal flex-1">
-                                    <option value="">--- Fatura Kesilecek Cariyi Seçiniz ---</option>
-                                    {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
-                                </select>
-                            )}
-                        </div>
+            <div className="p-3 md:p-4 bg-white shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                <div className="space-y-2">
+                    <div className="flex items-center"><label className="w-20 md:w-24 text-xs font-bold text-slate-700 shrink-0">Fatura No</label><input type="text" value={faturaForm.fatura_no} onChange={(e) => setFaturaForm({...faturaForm, fatura_no: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f1f5f9] cursor-default text-slate-500" : ""}`} /></div>
+                    <div className="flex items-center"><label className="w-20 md:w-24 text-xs font-bold text-slate-700 shrink-0">Tarih</label><input type="date" value={faturaForm.tarih} onChange={(e) => setFaturaForm({...faturaForm, tarih: e.target.value})} disabled={modalMod === "goruntule"} className={`input-kurumsal flex-1 ${modalMod === "goruntule" ? "bg-[#f1f5f9] cursor-default text-slate-500" : ""}`} /></div>
+                    <div className="flex items-center">
+                        <label className="w-20 md:w-24 text-xs font-bold text-slate-700 shrink-0">Cari Hesap</label>
+                        {modalMod === "goruntule" ? (
+                            <input type="text" disabled value={firmalar.find(f => f.id === Number(faturaForm.cari_id))?.unvan || "-"} className="input-kurumsal flex-1 bg-[#f1f5f9] cursor-default text-slate-500" />
+                        ) : (
+                            <select value={faturaForm.cari_id} onChange={(e) => setFaturaForm({...faturaForm, cari_id: e.target.value})} className="input-kurumsal flex-1">
+                                <option value="">--- Cari Seçiniz ---</option>
+                                {firmalar.map(f => <option key={f.id} value={f.id}>{f.unvan}</option>)}
+                            </select>
+                        )}
                     </div>
                 </div>
             </div>
@@ -662,21 +660,21 @@ export default function FaturaMerkezi() {
                 </table>
 
                 {/* MOBİL KART GÖRÜNÜMÜ (md altı) */}
-                <div className="md:hidden space-y-2">
+                <div className="md:hidden space-y-1.5">
                     {faturaKalemleri.map((item, index) => {
                         const tutarKDVli = pf(item.miktar) * pf(item.birim_fiyat) * (1 + (item.kdv_orani / 100));
                         return (
-                            <div key={index} className="bg-white p-3" style={{ border: "1px solid var(--c-border)" }}>
+                            <div key={index} className="bg-white px-3 py-2" style={{ border: "1px solid var(--c-border)" }}>
                                 {/* Satır no + Sil */}
-                                <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center justify-between mb-1.5">
                                     <span className="text-[10px] text-slate-400 font-bold">#{index + 1}</span>
                                     {modalMod === "duzenle" && <button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 text-xs"><i className="fas fa-times"></i></button>}
                                 </div>
                                 {/* Ürün adı */}
                                 {modalMod === "goruntule" ? (
-                                    <div className="text-[12px] font-semibold text-slate-800 mb-2">{item.urun_adi}</div>
+                                    <div className="text-[12px] font-semibold text-slate-800 mb-1.5">{item.urun_adi}</div>
                                 ) : (
-                                    <div ref={(el) => { if (el) autoWrapperRefs.current.set(index, el); else autoWrapperRefs.current.delete(index); }} className="relative mb-2">
+                                    <div ref={(el) => { if (el) autoWrapperRefs.current.set(index, el); else autoWrapperRefs.current.delete(index); }} className="relative mb-1.5">
                                         <input ref={(el) => { if (el) urunAdiInputRefs.current.set(index, el); else urunAdiInputRefs.current.delete(index); }} value={item.urun_adi} onChange={(e) => urunAdiDegisti(index, e.target.value)} onFocus={() => { if (item.urun_adi.trim().length >= 1) urunAdiDegisti(index, item.urun_adi); }} placeholder="Ürün veya hizmet adı yazın..." className="input-kurumsal w-full text-[12px] font-semibold" />
                                         {acikAutoIndex === index && autoSonuclar.length > 0 && (
                                             <div className="absolute left-0 right-0 top-full min-w-full bg-white shadow-lg border overflow-auto" style={{ zIndex: 90, maxHeight: "240px", borderColor: "var(--c-border)" }}>
@@ -732,16 +730,9 @@ export default function FaturaMerkezi() {
                 {modalMod === "duzenle" && <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-[#1d4ed8] hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>}
             </div>
 
-            <div className="p-4 flex flex-col sm:flex-row justify-between sm:items-end gap-4 shrink-0 print:bg-white print:border-black print:border-t-2" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
-                {modalMod === "duzenle" && (
-                    <div className="print:hidden w-full sm:w-auto">
-                        <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
-                            <i className="fas fa-save mr-2"></i> Faturayı Kaydet
-                        </button>
-                    </div>
-                )}
-
-                <div className="bg-white p-3 w-full sm:w-72 sm:ml-auto self-end" style={{ border: "1px solid var(--c-border)" }}>
+            <div className="p-3 md:p-4 flex flex-col gap-3 shrink-0 print:bg-white print:border-black print:border-t-2" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
+                {/* Toplamlar - her zaman üstte */}
+                <div className="bg-white p-3 w-full sm:w-72 sm:ml-auto" style={{ border: "1px solid var(--c-border)" }}>
                     <div className="flex justify-between items-center pb-1 mb-1" style={{ borderBottom: "1px solid var(--c-border)" }}>
                         <span className="text-[10px] font-bold text-slate-500 uppercase">Ara Toplam</span>
                         <span className="text-xs font-bold text-slate-700">{araToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} TL</span>
@@ -755,6 +746,14 @@ export default function FaturaMerkezi() {
                         <span className="text-xl font-semibold text-[#1d4ed8]">{genelToplamHesapla().toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} TL</span>
                     </div>
                 </div>
+                {/* Kaydet butonu - en altta */}
+                {modalMod === "duzenle" && (
+                    <div className="print:hidden">
+                        <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center sm:ml-auto`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
+                            <i className="fas fa-save mr-2"></i> Faturayı Kaydet
+                        </button>
+                    </div>
+                )}
             </div>
           </div>
         </div>
