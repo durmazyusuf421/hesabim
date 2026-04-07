@@ -76,7 +76,12 @@ export default function StokKartlari() {
   const [transferKaynakDepo, setTransferKaynakDepo] = useState<string>("");
   const [transferHedefDepo, setTransferHedefDepo] = useState<string>("");
   const [transferMiktar, setTransferMiktar] = useState("");
-  const { birimler: birimListesi } = useBirimler();
+  const { birimler: birimListesi, yenile: birimCacheYenile } = useBirimler();
+  // Birim modal
+  const [birimModalAcik, setBirimModalAcik] = useState(false);
+  const [tumBirimler, setTumBirimler] = useState<{id:number;birim_adi:string;kisaltma:string;aktif:boolean}[]>([]);
+  const [yeniBirimAdi, setYeniBirimAdi] = useState("");
+  const [yeniBirimKisaltma, setYeniBirimKisaltma] = useState("");
 
   const [formData, setFormData] = useState<FormDataState>({
       urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
@@ -206,6 +211,64 @@ export default function StokKartlari() {
   };
 
   const kategoriMap = Object.fromEntries(kategoriler.map(k => [k.id, k]));
+
+  // Birim fonksiyonları
+  const birimModalAc = async () => {
+      if (!aktifSirket) return;
+      const { data } = await supabase.from("birimler").select("id, birim_adi, kisaltma, aktif").eq("sirket_id", aktifSirket.id).order("birim_adi");
+      setTumBirimler(data || []);
+      setYeniBirimAdi(""); setYeniBirimKisaltma("");
+      setBirimModalAcik(true);
+  };
+  const birimEkle = async () => {
+      if (!aktifSirket || !yeniBirimAdi.trim()) { toast.error("Birim adı zorunludur!"); return; }
+      const { error } = await supabase.from("birimler").insert({ sirket_id: aktifSirket.id, birim_adi: yeniBirimAdi.trim(), kisaltma: yeniBirimKisaltma.trim() || yeniBirimAdi.trim() });
+      if (error) { toast.error("Birim eklenemedi: " + error.message); return; }
+      toast.success("Birim eklendi.");
+      setYeniBirimAdi(""); setYeniBirimKisaltma("");
+      const { data } = await supabase.from("birimler").select("id, birim_adi, kisaltma, aktif").eq("sirket_id", aktifSirket.id).order("birim_adi");
+      setTumBirimler(data || []);
+      birimCacheYenile();
+  };
+  const birimSil = async (b: {id:number;birim_adi:string;kisaltma:string}) => {
+      if (!aktifSirket) return;
+      const [{ count: c1 }, { count: c2 }] = await Promise.all([
+          supabase.from("urunler").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", aktifSirket.id).eq("birim", b.kisaltma),
+          supabase.from("fatura_detaylari").select("id", { count: "exact", head: true }).eq("birim", b.kisaltma),
+      ]);
+      if ((c1 || 0) > 0 || (c2 || 0) > 0) { toast.error(`"${b.birim_adi}" kullanımda olduğu için silinemez!`); return; }
+      onayla({ baslik: "Birim Sil", mesaj: `"${b.birim_adi}" silinsin mi?`, onayMetni: "Sil", tehlikeli: true, onOnayla: async () => {
+          await supabase.from("birimler").delete().eq("id", b.id);
+          const { data } = await supabase.from("birimler").select("id, birim_adi, kisaltma, aktif").eq("sirket_id", aktifSirket!.id).order("birim_adi");
+          setTumBirimler(data || []);
+          birimCacheYenile();
+      }});
+  };
+  const birimAktifToggle = async (b: {id:number;aktif:boolean}) => {
+      if (!aktifSirket) return;
+      await supabase.from("birimler").update({ aktif: !b.aktif }).eq("id", b.id);
+      const { data } = await supabase.from("birimler").select("id, birim_adi, kisaltma, aktif").eq("sirket_id", aktifSirket.id).order("birim_adi");
+      setTumBirimler(data || []);
+      birimCacheYenile();
+  };
+  const varsayilanBirimlerYukle = async () => {
+      if (!aktifSirket) return;
+      const varsayilanlar = [
+          { birim_adi: "Adet", kisaltma: "Adet" }, { birim_adi: "Kilogram", kisaltma: "Kg" },
+          { birim_adi: "Litre", kisaltma: "Lt" }, { birim_adi: "Metre", kisaltma: "Mt" },
+          { birim_adi: "Koli", kisaltma: "Koli" }, { birim_adi: "Paket", kisaltma: "Paket" },
+          { birim_adi: "Ton", kisaltma: "Ton" }, { birim_adi: "Kutu", kisaltma: "Kutu" },
+          { birim_adi: "Çuval", kisaltma: "Çuval" }, { birim_adi: "Gram", kisaltma: "Gr" },
+      ];
+      const mevcutKisaltmalar = new Set(tumBirimler.map(b => b.kisaltma));
+      const eklenecekler = varsayilanlar.filter(v => !mevcutKisaltmalar.has(v.kisaltma)).map(v => ({ ...v, sirket_id: aktifSirket.id }));
+      if (eklenecekler.length === 0) { toast.info("Tüm varsayılan birimler zaten mevcut."); return; }
+      await supabase.from("birimler").insert(eklenecekler);
+      toast.success(`${eklenecekler.length} varsayılan birim eklendi.`);
+      const { data } = await supabase.from("birimler").select("id, birim_adi, kisaltma, aktif").eq("sirket_id", aktifSirket.id).order("birim_adi");
+      setTumBirimler(data || []);
+      birimCacheYenile();
+  };
 
   // Depo fonksiyonları
   const depoKaydet = async () => {
@@ -351,6 +414,7 @@ export default function StokKartlari() {
                         <Link href="/stok/toplu-fiyat" className="btn-secondary flex items-center gap-2"><i className="fas fa-tags text-[10px]" /> TOPLU FİYAT</Link>
                         <Link href="/stok/sayim" className="btn-secondary flex items-center gap-2"><i className="fas fa-clipboard-check text-[10px]" /> STOK SAYIMI</Link>
                         <button onClick={() => { setKatFormAdi(""); setKatFormRenk("#3B82F6"); setKatDuzenleId(null); setKategoriModalAcik(true); }} className="btn-secondary flex items-center gap-2"><i className="fas fa-folder text-[10px]" /> KATEGORİLER</button>
+                        <button onClick={birimModalAc} className="btn-secondary flex items-center gap-2"><i className="fas fa-ruler text-[10px]" /> BİRİMLER</button>
                         <button onClick={() => { setDepoFormAdi(""); setDepoFormAdres(""); setDepoFormDuzenleId(null); setDepoModalAcik(true); }} className="btn-secondary flex items-center gap-2"><i className="fas fa-warehouse text-[10px]" /> DEPOLAR</button>
                         <div className="relative">
                             <button onClick={() => setExportMenuAcik(!exportMenuAcik)} className="btn-secondary flex items-center gap-2"><i className="fas fa-download text-[10px]" /> DIŞA AKTAR</button>
@@ -804,6 +868,65 @@ export default function StokKartlari() {
                   <div className="px-5 py-3 flex items-center justify-end gap-2" style={{ borderTop: "1px solid var(--c-border)" }}>
                       <button onClick={() => setTopluKategoriModal(false)} className="btn-secondary text-[11px]">İptal</button>
                       <button onClick={topluKategoriAta} className="btn-primary text-[11px]"><i className="fas fa-check text-[9px] mr-1" /> Uygula</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* BİRİM MODALI */}
+      {birimModalAcik && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setBirimModalAcik(false)}>
+              <div className="bg-white w-full max-w-2xl flex flex-col" style={{ height: "min(600px, 80vh)" }} onClick={e => e.stopPropagation()}>
+                  {/* HEADER - sabit üst */}
+                  <div className="px-6 py-4 flex items-center justify-between shrink-0" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                      <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 bg-blue-50 text-[#1d4ed8] flex items-center justify-center"><i className="fas fa-ruler" /></div>
+                          <div>
+                              <div className="text-[15px] font-semibold text-[#0f172a]">Birim Yönetimi</div>
+                              <div className="text-[10px] text-[#94a3b8]">{tumBirimler.length} birim tanımlı</div>
+                          </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                          <button onClick={varsayilanBirimlerYukle} className="btn-secondary text-[11px] flex items-center gap-1.5"><i className="fas fa-download text-[9px]" /> Varsayılanları Yükle</button>
+                          <button onClick={() => setBirimModalAcik(false)} className="w-8 h-8 flex items-center justify-center text-[#94a3b8] hover:text-[#0f172a] hover:bg-[#f8fafc] transition-colors"><i className="fas fa-times" /></button>
+                      </div>
+                  </div>
+                  {/* LİSTE - ortada, kaydırılabilir */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                      {tumBirimler.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full py-12 text-[#94a3b8]">
+                              <i className="fas fa-ruler-combined text-3xl mb-3 opacity-30" />
+                              <div className="text-[12px] font-semibold">Henüz birim eklenmemiş</div>
+                              <div className="text-[10px] mt-1">Aşağıdan yeni birim ekleyin veya varsayılanları yükleyin</div>
+                          </div>
+                      ) : tumBirimler.map(b => (
+                          <div key={b.id} className="flex items-center gap-4 px-6 py-3 hover:bg-[#f8fafc] transition-colors" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <div className="flex-1 flex items-center gap-3 min-w-0">
+                                  <span className="text-[13px] font-semibold text-[#0f172a]">{b.birim_adi}</span>
+                                  <span className="text-[11px] font-bold text-[#1d4ed8] bg-blue-50 px-2 py-0.5">{b.kisaltma}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                  <button onClick={() => birimAktifToggle(b)} className={`text-[10px] px-2.5 py-1 font-bold border transition-colors ${b.aktif ? 'text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100' : 'text-gray-400 border-gray-200 bg-gray-50 hover:bg-gray-100'}`}>
+                                      <i className={`fas ${b.aktif ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1`} />{b.aktif ? 'Aktif' : 'Pasif'}
+                                  </button>
+                                  <button onClick={() => birimSil(b)} className="w-8 h-8 flex items-center justify-center text-[#dc2626] border border-[#fecaca] hover:bg-[#fef2f2] transition-colors"><i className="fas fa-trash text-[9px]" /></button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+                  {/* FORM - sabit alt */}
+                  <div className="px-6 py-4 shrink-0" style={{ background: "#f8fafc", borderTop: "1px solid var(--c-border)" }}>
+                      <div className="flex items-end gap-3">
+                          <div className="flex-1">
+                              <label className="text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-1.5 block">Birim Adı</label>
+                              <input type="text" value={yeniBirimAdi} onChange={e => setYeniBirimAdi(e.target.value)} className="input-kurumsal w-full h-10" placeholder="Örn: Kilogram" />
+                          </div>
+                          <div className="w-32">
+                              <label className="text-[10px] font-semibold text-[#64748b] uppercase tracking-wider mb-1.5 block">Kısaltma</label>
+                              <input type="text" value={yeniBirimKisaltma} onChange={e => setYeniBirimKisaltma(e.target.value)} className="input-kurumsal w-full h-10" placeholder="Örn: Kg" />
+                          </div>
+                          <button onClick={birimEkle} className="btn-primary h-10 px-5 flex items-center gap-2 text-xs font-semibold shrink-0"><i className="fas fa-plus text-[9px]" /> Ekle</button>
+                      </div>
                   </div>
               </div>
           </div>

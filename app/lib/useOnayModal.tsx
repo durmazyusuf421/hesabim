@@ -9,6 +9,7 @@ interface OnayModalState {
     onayMetni?: string;
     tehlikeli?: boolean;
     onOnayla: () => void;
+    onReddet?: () => void;
 }
 
 const VARSAYILAN: OnayModalState = { acik: false, baslik: "", mesaj: "", onOnayla: () => {} };
@@ -16,11 +17,13 @@ const VARSAYILAN: OnayModalState = { acik: false, baslik: "", mesaj: "", onOnayl
 export function useOnayModal() {
     const [state, setState] = useState<OnayModalState>(VARSAYILAN);
 
-    const onayla = useCallback((opts: { baslik: string; mesaj: string; altMesaj?: string; onayMetni?: string; tehlikeli?: boolean; onOnayla: () => void }) => {
+    const onayla = useCallback((opts: { baslik: string; mesaj: string; altMesaj?: string; onayMetni?: string; tehlikeli?: boolean; onOnayla: () => void; onReddet?: () => void }) => {
         setState({ acik: true, ...opts });
     }, []);
 
-    const kapat = useCallback(() => setState(VARSAYILAN), []);
+    const kapat = useCallback(() => {
+        setState(prev => { prev.onReddet?.(); return VARSAYILAN; });
+    }, []);
 
     const OnayModal = () => {
         if (!state.acik) return null;
