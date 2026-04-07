@@ -612,7 +612,8 @@ export default function FaturaMerkezi() {
             </div>
 
             <div className="flex-1 overflow-auto p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
-                <table className="tbl-kurumsal">
+                {/* MASAÜSTÜ TABLO (md+) */}
+                <table className="tbl-kurumsal hidden md:table">
                     <thead>
                         <tr>
                             <th className="w-8 text-center print:hidden">#</th>
@@ -620,35 +621,27 @@ export default function FaturaMerkezi() {
                             <th className="w-24 text-center">Miktar</th>
                             <th className="w-20 text-center">Birim</th>
                             <th className="w-32 text-right">Birim Fiyat</th>
-                            <th className="w-16 text-center hidden md:table-cell">KDV %</th>
+                            <th className="w-16 text-center">KDV %</th>
                             <th className="w-32 text-right">KDV&apos;li Tutar</th>
                             {modalMod === "duzenle" && <th className="w-8 text-center print:hidden"><i className="fas fa-trash"></i></th>}
                         </tr>
                     </thead>
                     <tbody>
                         {faturaKalemleri.map((item, index) => {
-                            const tutarKDVsiz = pf(item.miktar) * pf(item.birim_fiyat);
-                            const tutarKDVli = tutarKDVsiz * (1 + (item.kdv_orani / 100));
+                            const tutarKDVli = pf(item.miktar) * pf(item.birim_fiyat) * (1 + (item.kdv_orani / 100));
                             return (
                                 <tr key={index} className="hover:bg-[#f8fafc] focus-within:bg-[#f8fafc] transition-colors">
                                     <td className="text-center text-[10px] text-slate-400 font-bold print:hidden">{index + 1}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-semibold text-slate-800" : "p-0 relative"}`}>
                                         {modalMod === "goruntule" ? item.urun_adi : (
                                             <div ref={(el) => { if (el) autoWrapperRefs.current.set(index, el); else autoWrapperRefs.current.delete(index); }} className="relative">
-                                                <input
-                                                    ref={(el) => { if (el) urunAdiInputRefs.current.set(index, el); else urunAdiInputRefs.current.delete(index); }}
-                                                    value={item.urun_adi}
-                                                    onChange={(e) => urunAdiDegisti(index, e.target.value)}
-                                                    onFocus={() => { if (item.urun_adi.trim().length >= 1) urunAdiDegisti(index, item.urun_adi); }}
-                                                    placeholder="Ürün veya hizmet adı yazın..."
-                                                    className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white"
-                                                />
+                                                <input ref={(el) => { if (el) urunAdiInputRefs.current.set(index, el); else urunAdiInputRefs.current.delete(index); }} value={item.urun_adi} onChange={(e) => urunAdiDegisti(index, e.target.value)} onFocus={() => { if (item.urun_adi.trim().length >= 1) urunAdiDegisti(index, item.urun_adi); }} placeholder="Ürün veya hizmet adı yazın..." className="w-full px-2 py-1.5 text-[11px] font-semibold text-slate-800 outline-none bg-transparent focus:bg-white" />
                                                 {acikAutoIndex === index && autoSonuclar.length > 0 && (
-                                                    <div className="absolute left-0 right-0 top-full bg-white shadow-lg border overflow-auto" style={{ zIndex: 90, maxHeight: "200px", borderColor: "var(--c-border)" }}>
+                                                    <div className="absolute left-0 right-0 top-full min-w-full bg-white shadow-lg border overflow-auto" style={{ zIndex: 90, maxHeight: "240px", borderColor: "var(--c-border)" }}>
                                                         {autoSonuclar.map(urun => (
-                                                            <button key={urun.id} onClick={() => autoUrunSec(index, urun)} className="w-full text-left px-2.5 py-2 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
-                                                                <span className="text-[11px] font-bold text-slate-800 truncate">{urun.urun_adi}</span>
-                                                                <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">{Number(urun.satis_fiyati).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL / {urun.birim}</span>
+                                                            <button key={urun.id} onClick={() => autoUrunSec(index, urun)} className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors block" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                                                <div className="text-[12px] font-medium text-slate-800">{urun.urun_adi}</div>
+                                                                <div className="text-[10px] text-slate-400 mt-0.5">{Number(urun.satis_fiyati).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL / {urun.birim}</div>
                                                             </button>
                                                         ))}
                                                     </div>
@@ -658,8 +651,8 @@ export default function FaturaMerkezi() {
                                     </td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`}>{modalMod === "goruntule" ? item.miktar : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.miktar} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-1 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.birim_fiyat} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
-                                    <td className={`hidden md:table-cell ${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.birim_fiyat} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                     {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
                                 </tr>
@@ -667,6 +660,75 @@ export default function FaturaMerkezi() {
                         })}
                     </tbody>
                 </table>
+
+                {/* MOBİL KART GÖRÜNÜMÜ (md altı) */}
+                <div className="md:hidden space-y-2">
+                    {faturaKalemleri.map((item, index) => {
+                        const tutarKDVli = pf(item.miktar) * pf(item.birim_fiyat) * (1 + (item.kdv_orani / 100));
+                        return (
+                            <div key={index} className="bg-white p-3" style={{ border: "1px solid var(--c-border)" }}>
+                                {/* Satır no + Sil */}
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] text-slate-400 font-bold">#{index + 1}</span>
+                                    {modalMod === "duzenle" && <button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 text-xs"><i className="fas fa-times"></i></button>}
+                                </div>
+                                {/* Ürün adı */}
+                                {modalMod === "goruntule" ? (
+                                    <div className="text-[12px] font-semibold text-slate-800 mb-2">{item.urun_adi}</div>
+                                ) : (
+                                    <div ref={(el) => { if (el) autoWrapperRefs.current.set(index, el); else autoWrapperRefs.current.delete(index); }} className="relative mb-2">
+                                        <input ref={(el) => { if (el) urunAdiInputRefs.current.set(index, el); else urunAdiInputRefs.current.delete(index); }} value={item.urun_adi} onChange={(e) => urunAdiDegisti(index, e.target.value)} onFocus={() => { if (item.urun_adi.trim().length >= 1) urunAdiDegisti(index, item.urun_adi); }} placeholder="Ürün veya hizmet adı yazın..." className="input-kurumsal w-full text-[12px] font-semibold" />
+                                        {acikAutoIndex === index && autoSonuclar.length > 0 && (
+                                            <div className="absolute left-0 right-0 top-full min-w-full bg-white shadow-lg border overflow-auto" style={{ zIndex: 90, maxHeight: "240px", borderColor: "var(--c-border)" }}>
+                                                {autoSonuclar.map(urun => (
+                                                    <button key={urun.id} onClick={() => autoUrunSec(index, urun)} className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors block" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                                        <div className="text-[12px] font-medium text-slate-800">{urun.urun_adi}</div>
+                                                        <div className="text-[10px] text-slate-400 mt-0.5">{Number(urun.satis_fiyati).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL / {urun.birim}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {/* 2x2 Grid: Miktar, Birim, Fiyat, KDV */}
+                                {modalMod === "goruntule" ? (
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                                        <div className="flex justify-between"><span className="text-slate-500">Miktar:</span><span className="font-bold">{item.miktar} {item.birim}</span></div>
+                                        <div className="flex justify-between"><span className="text-slate-500">Fiyat:</span><span className="font-bold text-[#1d4ed8]">{pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2})}</span></div>
+                                        <div className="flex justify-between"><span className="text-slate-500">KDV:</span><span className="font-bold text-orange-600">%{item.kdv_orani}</span></div>
+                                        <div className="flex justify-between"><span className="text-slate-500">Tutar:</span><span className="font-bold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Miktar</label>
+                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.miktar} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val); }} className="input-kurumsal w-full text-center text-[12px] font-bold" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Birim</label>
+                                                <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="input-kurumsal w-full text-center text-[12px] font-bold cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Birim Fiyat</label>
+                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.birim_fiyat} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} className="input-kurumsal w-full text-right text-[12px] font-bold text-[#1d4ed8]" />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">KDV %</label>
+                                                <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} className="input-kurumsal w-full text-center text-[12px] font-bold text-orange-600 cursor-pointer"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2 pt-2" style={{ borderTop: "1px solid var(--c-border)" }}>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase">KDV&apos;li Tutar</span>
+                                            <span className="text-[13px] font-bold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} TL</span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
                 {modalMod === "duzenle" && <button onClick={satirEkle} className="mt-3 ml-2 text-[11px] font-bold text-[#1d4ed8] hover:underline print:hidden flex items-center"><i className="fas fa-plus-circle mr-1"></i> Yeni Fatura Satırı Ekle</button>}
             </div>
 
