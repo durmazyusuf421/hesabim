@@ -348,7 +348,7 @@ export default function MusteriPortali() {
             </div>
 
             {/* MOBİL KART GÖRÜNÜMÜ (md altı) */}
-            <div className="md:hidden p-2 space-y-2">
+            <div className="md:hidden px-3 py-2 space-y-2 overflow-x-hidden">
                 {yukleniyor ? (
                     <div className="p-8 text-center text-slate-400 font-semibold">Ürünler Yükleniyor...</div>
                 ) : gosterilenUrunler.length === 0 ? (
@@ -365,26 +365,25 @@ export default function MusteriPortali() {
                         const miktar = sepettekiUrun ? sepettekiUrun.miktar : 0;
                         const saticiFirma = benimTedarikcilerim.find(t => t.id === u.sahip_sirket_id)?.isletme_adi || "-";
                         return (
-                            <div key={u.id} className="bg-white p-3 rounded" style={{ border: "1px solid var(--c-border)" }}>
-                                <div className="flex items-start justify-between gap-2 mb-2">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-[13px] font-bold text-[#0f172a] leading-tight">{u.urun_adi}</div>
-                                        <div className="text-[10px] font-semibold text-cyan-700 mt-0.5">{saticiFirma}</div>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                        <div className="text-[13px] font-bold text-[#059669]">
-                                            {ozelFiyatVar && <span className="bg-emerald-50 text-[#059669] border border-emerald-200 text-[7px] font-bold px-1 py-0 mr-1">Özel</span>}
-                                            {Number(gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
-                                        </div>
+                            <div key={u.id} className="bg-white px-3 py-2.5 rounded max-w-full overflow-hidden" style={{ border: "1px solid var(--c-border)" }}>
+                                {/* Üst: Ürün adı + Fiyat */}
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="text-[13px] font-bold text-[#0f172a] leading-tight flex-1 min-w-0">{u.urun_adi}</div>
+                                    <div className="text-[13px] font-bold text-[#059669] shrink-0 whitespace-nowrap">
+                                        {ozelFiyatVar && <span className="bg-emerald-50 text-[#059669] border border-emerald-200 text-[7px] font-bold px-1 py-0 mr-1">Özel</span>}
+                                        {Number(gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL
                                     </div>
                                 </div>
+                                {/* Orta: Tedarikçi */}
+                                <div className="text-[10px] font-semibold text-cyan-700 mt-0.5 mb-2">{saticiFirma}</div>
+                                {/* Alt: Birim + Miktar + Tutar */}
                                 <div className="flex items-center gap-2">
-                                    <select value={aktifBirimNo} onChange={(e) => setAktifBirimler({...aktifBirimler, [u.id]: Number(e.target.value)})} className="input-kurumsal text-[11px] font-semibold cursor-pointer px-2 py-2 w-20 shrink-0">
+                                    <select value={aktifBirimNo} onChange={(e) => setAktifBirimler({...aktifBirimler, [u.id]: Number(e.target.value)})} className="input-kurumsal text-[11px] font-semibold cursor-pointer px-1.5 py-2 w-24 shrink-0">
                                         <option value={-1}>{u.birim}</option>
                                         {u.alt_birimler && u.alt_birimler.map((ab: AltBirim, idx: number) => (<option key={idx} value={idx}>{ab.birim}</option>))}
                                     </select>
-                                    <input type="number" min="1" value={miktar || ''} onChange={(e) => sepeteEkle(u, Number(e.target.value), gecerliBirim, gecerliFiyat)} placeholder="0" className="input-kurumsal h-10 w-20 text-center text-[14px] font-bold flex-1" />
-                                    {miktar > 0 && <span className="text-[12px] font-bold text-[#0f172a] shrink-0">{(miktar * gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>}
+                                    <input type="text" inputMode="decimal" value={miktar || ''} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') sepeteEkle(u, Number(v) || 0, gecerliBirim, gecerliFiyat); }} placeholder="0" className="input-kurumsal h-10 text-center text-[14px] font-bold flex-1 min-w-0" />
+                                    <div className="w-20 text-right text-[12px] font-bold text-[#059669] shrink-0">{miktar > 0 ? `${(miktar * gecerliFiyat).toLocaleString('tr-TR', {minimumFractionDigits: 2})}` : ''}</div>
                                 </div>
                             </div>
                         );
