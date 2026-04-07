@@ -1,7 +1,7 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/useAuth";
 import { supabase } from "@/app/lib/supabase";
 import { bildirimEkle } from "@/app/lib/bildirim";
@@ -79,8 +79,11 @@ const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
     "/portal/raporlar": { baslik: "Raporlarım", alt: "Satış, kasa ve veresiye analizleri" },
 };
 
+interface AramaSonuc { tip: "urun" | "musteri" | "siparis" | "fatura"; baslik: string; alt: string; href: string; }
+
 export default function AppWrapper({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
+    const router = useRouter();
     const { aktifSirket, isYonetici, isPlasiyer, isDepocu, isMuhasebe, cikisYap, yukleniyor: authYukleniyor } = useAuth();
     const [mobilMenuAcik, setMobilMenuAcik] = useState<boolean>(false);
     const [isMounted, setIsMounted] = useState(false);
@@ -89,6 +92,13 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     // Bildirim sistemi
     const [bildirimler, setBildirimler] = useState<{id:number;baslik:string;mesaj:string;tip:string;kaynak:string|null;kaynak_id:number|null;okundu:boolean;created_at:string}[]>([]);
     const [bildirimPanelAcik, setBildirimPanelAcik] = useState(false);
+    // Global arama
+    const [aramaAcik, setAramaAcik] = useState(false);
+    const [aramaSorgu, setAramaSorgu] = useState("");
+    const [aramaSonuclar, setAramaSonuclar] = useState<AramaSonuc[]>([]);
+    const [aramaYukleniyor, setAramaYukleniyor] = useState(false);
+    const aramaInputRef = useRef<HTMLInputElement>(null);
+    const aramaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Birimler global yükleme (uygulama açılışında bir kez fetch)
     useBirimler();
 
@@ -97,10 +107,52 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
         const timer = setTimeout(() => { setAuthTimeout(true); }, 8000);
         const handleMenuOpen = () => setMobilMenuAcik(true);
         window.addEventListener('openMobilMenu', handleMenuOpen);
-        return () => { clearTimeout(timer); window.removeEventListener('openMobilMenu', handleMenuOpen); };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); setAramaAcik(true); }
+            if (e.key === "Escape") setAramaAcik(false);
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => { clearTimeout(timer); window.removeEventListener('openMobilMenu', handleMenuOpen); window.removeEventListener("keydown", handleKeyDown); };
     }, []);
 
     useEffect(() => { if (aktifSirket) setAuthTimeout(false); }, [aktifSirket]);
+
+    // Global arama - modal açılınca input'a focus
+    useEffect(() => {
+        if (aramaAcik) { setAramaSorgu(""); setAramaSonuclar([]); setTimeout(() => aramaInputRef.current?.focus(), 100); }
+    }, [aramaAcik]);
+
+    const globalAramaYap = useCallback(async (sorgu: string) => {
+        if (!aktifSirket || sorgu.length < 2) { setAramaSonuclar([]); setAramaYukleniyor(false); return; }
+        setAramaYukleniyor(true);
+        const sirketId = aktifSirket.id;
+        const sonuclar: AramaSonuc[] = [];
+        try {
+            const [urunRes, musteriRes, siparisRes, faturaRes] = await Promise.all([
+                supabase.from("urunler").select("id, urun_adi, satis_fiyati, birim").eq("sahip_sirket_id", sirketId).ilike("urun_adi", `%${sorgu}%`).limit(3),
+                supabase.from("firmalar").select("id, unvan").eq("sahip_sirket_id", sirketId).ilike("unvan", `%${sorgu}%`).limit(3),
+                supabase.from("siparisler").select("id, siparis_no, toplam_tutar, durum").eq("satici_sirket_id", sirketId).ilike("siparis_no", `%${sorgu}%`).limit(3),
+                supabase.from("faturalar").select("id, fatura_no, genel_toplam, tip").eq("sirket_id", sirketId).ilike("fatura_no", `%${sorgu}%`).limit(3),
+            ]);
+            if (urunRes.data) urunRes.data.forEach(u => sonuclar.push({ tip: "urun", baslik: u.urun_adi, alt: `${Number(u.satis_fiyati || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL · ${u.birim || "Adet"}`, href: "/stok" }));
+            if (musteriRes.data) musteriRes.data.forEach(m => sonuclar.push({ tip: "musteri", baslik: m.unvan, alt: "Cari Kart", href: "/cari" }));
+            if (siparisRes.data) siparisRes.data.forEach(s => sonuclar.push({ tip: "siparis", baslik: s.siparis_no || `#${s.id}`, alt: `${s.durum} · ${Number(s.toplam_tutar || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL`, href: "/" }));
+            if (faturaRes.data) faturaRes.data.forEach(f => sonuclar.push({ tip: "fatura", baslik: f.fatura_no, alt: `${f.tip === "GIDEN" ? "Satış" : "Alış"} · ${Number(f.genel_toplam || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL`, href: "/faturalar" }));
+        } catch { /* */ }
+        setAramaSonuclar(sonuclar);
+        setAramaYukleniyor(false);
+    }, [aktifSirket]);
+
+    const aramaGirdiDegisti = (val: string) => {
+        setAramaSorgu(val);
+        if (aramaTimerRef.current) clearTimeout(aramaTimerRef.current);
+        aramaTimerRef.current = setTimeout(() => globalAramaYap(val), 300);
+    };
+
+    const aramaSonucTikla = (href: string) => {
+        setAramaAcik(false);
+        router.push(href);
+    };
 
     // Günlük otomatik döviz kuru güncelleme
     useEffect(() => {
@@ -327,6 +379,9 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
+                        <button onClick={() => setAramaAcik(true)} className="w-8 h-8 flex items-center justify-center text-[#64748b] hover:text-[#0f172a] hover:bg-[#f8fafc] transition-colors" style={{ border: "1px solid var(--c-border)" }} title="Ara (Ctrl+K)">
+                            <i className="fas fa-search text-[12px]" />
+                        </button>
                         <button onClick={() => setBildirimPanelAcik(!bildirimPanelAcik)} className="relative w-8 h-8 flex items-center justify-center text-[#64748b] hover:text-[#0f172a] hover:bg-[#f8fafc] transition-colors" style={{ border: "1px solid var(--c-border)" }}>
                             <i className="fas fa-bell text-[12px]" />
                             {okunmamisSayisi > 0 && (
@@ -397,6 +452,115 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* Global Arama Modalı */}
+                {aramaAcik && (
+                    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[10vh] px-4" style={{ background: "rgba(15,23,42,0.6)", backdropFilter: "blur(4px)" }} onClick={() => setAramaAcik(false)}>
+                        <div className="bg-white w-full max-w-xl rounded-xl overflow-hidden" style={{ boxShadow: "0 25px 60px rgba(0,0,0,0.3)" }} onClick={e => e.stopPropagation()}>
+                            {/* Arama Input */}
+                            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid #e2e8f0" }}>
+                                <i className={`fas ${aramaYukleniyor ? "fa-circle-notch fa-spin" : "fa-search"} text-[#94a3b8] text-sm`} />
+                                <input ref={aramaInputRef} type="text" value={aramaSorgu} onChange={e => aramaGirdiDegisti(e.target.value)} placeholder="Ürün, müşteri, sipariş veya fatura ara..." className="flex-1 text-[14px] text-[#0f172a] placeholder-[#cbd5e1] outline-none bg-transparent font-medium" />
+                                <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-[9px] font-semibold text-[#94a3b8] bg-[#f1f5f9] rounded" style={{ border: "1px solid #e2e8f0" }}>ESC</kbd>
+                            </div>
+                            {/* Sonuçlar */}
+                            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                                {aramaSorgu.length < 2 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                                        <i className="fas fa-search text-[28px] text-[#e2e8f0] mb-3" />
+                                        <div className="text-[11px] text-[#94a3b8] font-medium">Aramak için en az 2 karakter yazın</div>
+                                        <div className="text-[10px] text-[#cbd5e1] mt-1">Ctrl+K ile hızlı arama</div>
+                                    </div>
+                                ) : aramaYukleniyor ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <i className="fas fa-circle-notch fa-spin text-[#94a3b8] text-lg" />
+                                    </div>
+                                ) : aramaSonuclar.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                                        <i className="fas fa-inbox text-[28px] text-[#e2e8f0] mb-3" />
+                                        <div className="text-[12px] text-[#94a3b8] font-semibold">Sonuç bulunamadı</div>
+                                        <div className="text-[10px] text-[#cbd5e1] mt-1">&ldquo;{aramaSorgu}&rdquo; ile eşleşen kayıt yok</div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Ürünler */}
+                                        {aramaSonuclar.filter(s => s.tip === "urun").length > 0 && (
+                                            <div>
+                                                <div className="px-5 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest bg-[#f8fafc]">Ürünler</div>
+                                                {aramaSonuclar.filter(s => s.tip === "urun").map((s, i) => (
+                                                    <button key={`u${i}`} onClick={() => aramaSonucTikla(s.href)} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#f8fafc] transition-colors text-left" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                                        <div className="w-8 h-8 bg-[#eff6ff] text-[#3b82f6] flex items-center justify-center shrink-0 rounded-lg"><i className="fas fa-box text-[11px]" /></div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[12px] font-semibold text-[#0f172a] truncate">{s.baslik}</div>
+                                                            <div className="text-[10px] text-[#94a3b8]">{s.alt}</div>
+                                                        </div>
+                                                        <i className="fas fa-chevron-right text-[8px] text-[#cbd5e1]" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* Müşteriler */}
+                                        {aramaSonuclar.filter(s => s.tip === "musteri").length > 0 && (
+                                            <div>
+                                                <div className="px-5 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest bg-[#f8fafc]">Müşteriler</div>
+                                                {aramaSonuclar.filter(s => s.tip === "musteri").map((s, i) => (
+                                                    <button key={`m${i}`} onClick={() => aramaSonucTikla(s.href)} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#f8fafc] transition-colors text-left" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                                        <div className="w-8 h-8 bg-[#f0fdf4] text-[#059669] flex items-center justify-center shrink-0 rounded-lg"><i className="fas fa-user text-[11px]" /></div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[12px] font-semibold text-[#0f172a] truncate">{s.baslik}</div>
+                                                            <div className="text-[10px] text-[#94a3b8]">{s.alt}</div>
+                                                        </div>
+                                                        <i className="fas fa-chevron-right text-[8px] text-[#cbd5e1]" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* Siparişler */}
+                                        {aramaSonuclar.filter(s => s.tip === "siparis").length > 0 && (
+                                            <div>
+                                                <div className="px-5 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest bg-[#f8fafc]">Siparişler</div>
+                                                {aramaSonuclar.filter(s => s.tip === "siparis").map((s, i) => (
+                                                    <button key={`s${i}`} onClick={() => aramaSonucTikla(s.href)} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#f8fafc] transition-colors text-left" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                                        <div className="w-8 h-8 bg-[#fefce8] text-[#d97706] flex items-center justify-center shrink-0 rounded-lg"><i className="fas fa-clipboard-list text-[11px]" /></div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[12px] font-semibold text-[#0f172a] truncate">{s.baslik}</div>
+                                                            <div className="text-[10px] text-[#94a3b8]">{s.alt}</div>
+                                                        </div>
+                                                        <i className="fas fa-chevron-right text-[8px] text-[#cbd5e1]" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* Faturalar */}
+                                        {aramaSonuclar.filter(s => s.tip === "fatura").length > 0 && (
+                                            <div>
+                                                <div className="px-5 py-2 text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest bg-[#f8fafc]">Faturalar</div>
+                                                {aramaSonuclar.filter(s => s.tip === "fatura").map((s, i) => (
+                                                    <button key={`f${i}`} onClick={() => aramaSonucTikla(s.href)} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-[#f8fafc] transition-colors text-left" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                                        <div className="w-8 h-8 bg-[#faf5ff] text-[#7c3aed] flex items-center justify-center shrink-0 rounded-lg"><i className="fas fa-file-invoice text-[11px]" /></div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[12px] font-semibold text-[#0f172a] truncate">{s.baslik}</div>
+                                                            <div className="text-[10px] text-[#94a3b8]">{s.alt}</div>
+                                                        </div>
+                                                        <i className="fas fa-chevron-right text-[8px] text-[#cbd5e1]" />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                            {/* Alt bilgi */}
+                            <div className="flex items-center justify-between px-5 py-2.5 bg-[#f8fafc]" style={{ borderTop: "1px solid #e2e8f0" }}>
+                                <div className="flex items-center gap-3 text-[9px] text-[#cbd5e1]">
+                                    <span><kbd className="px-1 py-0.5 bg-white rounded text-[8px] font-semibold" style={{ border: "1px solid #e2e8f0" }}>↑↓</kbd> gezin</span>
+                                    <span><kbd className="px-1 py-0.5 bg-white rounded text-[8px] font-semibold" style={{ border: "1px solid #e2e8f0" }}>↵</kbd> aç</span>
+                                    <span><kbd className="px-1 py-0.5 bg-white rounded text-[8px] font-semibold" style={{ border: "1px solid #e2e8f0" }}>esc</kbd> kapat</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 )}
 
                 {/* Sayfa İçeriği */}

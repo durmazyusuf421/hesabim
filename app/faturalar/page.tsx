@@ -197,103 +197,154 @@ export default function FaturaMerkezi() {
   const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
   const faturaYazdir = () => {
-      const cariAdi = (() => { const f = faturalar.find(f => f.id === seciliFaturaId); return f?.cari_adi || firmalar.find(fr => fr.id === Number(faturaForm.cari_id))?.unvan || "-"; })();
-      const tarihStr = new Date(faturaForm.tarih).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+      const cariId = Number(faturaForm.cari_id);
+      const cariFirma = firmalar.find(fr => fr.id === cariId);
+      const faturaKayit = faturalar.find(f => f.id === seciliFaturaId);
+      const cariAdi = faturaKayit?.cari_adi || cariFirma?.unvan || "-";
+      const tarihStr = new Date(faturaForm.tarih).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
       const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const sirket = aktifSirket;
 
       const kalemRows = faturaKalemleri.filter(k => k.urun_adi).map((k, i) => {
           const m = pf(k.miktar), f = pf(k.birim_fiyat);
           const araTutar = m * f;
-          const toplamTutar = araTutar + araTutar * (k.kdv_orani / 100);
-          return `<tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'};border-bottom:1px solid #e2e8f0">
-            <td style="padding:7px 6px;text-align:center;color:#94a3b8;font-weight:600">${i + 1}</td>
-            <td style="padding:7px 6px;font-weight:500">${k.urun_adi}</td>
-            <td style="padding:7px 6px;text-align:center;font-weight:600">${k.miktar}</td>
-            <td style="padding:7px 6px;text-align:center;text-transform:uppercase">${k.birim}</td>
-            <td style="padding:7px 6px;text-align:right;font-weight:600">${fmt(f)}</td>
-            <td style="padding:7px 6px;text-align:center">%${k.kdv_orani}</td>
-            <td style="padding:7px 6px;text-align:right;font-weight:700">${fmt(toplamTutar)}</td>
+          const kdvTutar = araTutar * (k.kdv_orani / 100);
+          const toplamTutar = araTutar + kdvTutar;
+          return `<tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'}">
+            <td style="padding:9px 8px;text-align:center;color:#94a3b8;font-weight:600;border-bottom:1px solid #e8ecf1">${i + 1}</td>
+            <td style="padding:9px 8px;font-weight:500;color:#1e293b;border-bottom:1px solid #e8ecf1">${k.urun_adi}</td>
+            <td style="padding:9px 8px;text-align:center;font-weight:600;color:#334155;border-bottom:1px solid #e8ecf1">${k.miktar}</td>
+            <td style="padding:9px 8px;text-align:center;color:#64748b;text-transform:uppercase;font-size:10px;border-bottom:1px solid #e8ecf1">${k.birim}</td>
+            <td style="padding:9px 8px;text-align:right;font-weight:600;color:#334155;border-bottom:1px solid #e8ecf1">${fmt(f)}</td>
+            <td style="padding:9px 8px;text-align:center;color:#64748b;border-bottom:1px solid #e8ecf1">%${k.kdv_orani}</td>
+            <td style="padding:9px 8px;text-align:right;font-weight:700;color:#0f172a;border-bottom:1px solid #e8ecf1">${fmt(toplamTutar)}</td>
           </tr>`;
       }).join("");
 
-      const sirket = aktifSirket;
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatura - ${faturaForm.fatura_no}</title>
-        <style>body{font-family:Arial,sans-serif;color:#1a1a1a;margin:0;padding:40px;max-width:210mm;margin:0 auto}table{width:100%;border-collapse:collapse;font-size:11px}@media print{body{padding:20px}}</style>
-      </head><body>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:16px;border-bottom:3px solid #1e3a5f">
-          <div>
-            <div style="font-size:22px;font-weight:700;color:#1e3a5f;line-height:1.2">${sirket?.isletme_adi || sirket?.unvan || "Firma Adı"}</div>
-            ${sirket?.unvan && sirket.unvan !== sirket.isletme_adi ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${sirket.unvan}</div>` : ""}
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:28px;font-weight:700;color:#1e3a5f;letter-spacing:2px">FATURA</div>
-            <div style="font-size:12px;color:#475569;margin-top:4px"><b>No:</b> ${faturaForm.fatura_no}</div>
-            <div style="font-size:12px;color:#475569"><b>Tarih:</b> ${tarihStr}</div>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px">${faturaTipi === "GIDEN" ? "Satış Faturası" : "Alış Faturası"}</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:32px;margin-top:20px;margin-bottom:24px">
-          <div style="flex:1;background:#f8fafc;padding:14px;border:1px solid #e2e8f0">
-            <div style="font-size:10px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid #cbd5e1;padding-bottom:4px">Satıcı</div>
-            <div style="font-size:13px;font-weight:700;color:#1e293b">${sirket?.isletme_adi || "-"}</div>
-            ${sirket?.adres ? `<div style="font-size:11px;color:#475569;margin-top:4px">${sirket.adres}</div>` : ""}
-            ${sirket?.il || sirket?.ilce ? `<div style="font-size:11px;color:#475569">${[sirket?.ilce, sirket?.il].filter(Boolean).join(" / ")}</div>` : ""}
-            ${sirket?.vergi_dairesi ? `<div style="font-size:11px;color:#475569;margin-top:4px">V.D.: ${sirket.vergi_dairesi}</div>` : ""}
-            ${sirket?.vergi_no ? `<div style="font-size:11px;color:#475569">V.K.N.: ${sirket.vergi_no}</div>` : ""}
-            ${sirket?.telefon ? `<div style="font-size:11px;color:#475569;margin-top:4px">Tel: ${sirket.telefon}</div>` : ""}
-          </div>
-          <div style="flex:1;background:#f8fafc;padding:14px;border:1px solid #e2e8f0">
-            <div style="font-size:10px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid #cbd5e1;padding-bottom:4px">Alıcı</div>
-            <div style="font-size:13px;font-weight:700;color:#1e293b">${cariAdi}</div>
-          </div>
-        </div>
-        <table>
-          <thead><tr style="background:#1e3a5f;color:#fff">
-            <th style="padding:8px 6px;text-align:center;width:30px;font-weight:600">#</th>
-            <th style="padding:8px 6px;text-align:left;font-weight:600">Ürün / Hizmet</th>
-            <th style="padding:8px 6px;text-align:center;width:60px;font-weight:600">Miktar</th>
-            <th style="padding:8px 6px;text-align:center;width:55px;font-weight:600">Birim</th>
-            <th style="padding:8px 6px;text-align:right;width:90px;font-weight:600">Birim Fiyat</th>
-            <th style="padding:8px 6px;text-align:center;width:50px;font-weight:600">KDV%</th>
-            <th style="padding:8px 6px;text-align:right;width:100px;font-weight:600">Tutar</th>
-          </tr></thead>
-          <tbody>${kalemRows}</tbody>
-        </table>
-        <div style="display:flex;justify-content:flex-end;margin-top:16px">
-          <div style="width:260px">
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px">
-              <span style="color:#64748b;font-weight:600">Ara Toplam</span>
-              <span style="font-weight:600">${fmt(araToplamHesapla())} TL</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px">
-              <span style="color:#64748b;font-weight:600">KDV Toplam</span>
-              <span style="font-weight:600;color:#ea580c">${fmt(kdvToplamHesapla())} TL</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:10px;font-size:16px;background:#1e3a5f;color:#fff;margin-top:4px">
-              <span style="font-weight:700">GENEL TOPLAM</span>
-              <span style="font-weight:700">${fmt(genelToplamHesapla())} TL</span>
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:40px;gap:32px">
-          <div style="flex:1">
-            <div style="font-size:10px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Notlar</div>
-            <div style="border:1px solid #e2e8f0;padding:10px;min-height:50px;font-size:11px;color:#64748b">&nbsp;</div>
-          </div>
-          <div style="width:200px;text-align:center">
-            <div style="font-size:10px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Kaşe / İmza</div>
-            <div style="border-bottom:1px solid #1e3a5f;margin-top:60px"></div>
-          </div>
-        </div>
-        <div style="text-align:center;margin-top:32px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:9px;color:#94a3b8;letter-spacing:0.5px">Bu fatura elektronik ortamda oluşturulmuştur.</div>
-      </body></html>`;
+      const firmaAdi = sirket?.isletme_adi || sirket?.unvan || "Firma Adı";
+      const firmaAdres = [sirket?.adres, [sirket?.ilce, sirket?.il].filter(Boolean).join("/")].filter(Boolean).join(", ");
+      const firmaVergi = [sirket?.vergi_dairesi ? `V.D.: ${sirket.vergi_dairesi}` : "", sirket?.vergi_no ? `V.K.N.: ${sirket.vergi_no}` : ""].filter(Boolean).join(" · ");
+      const firmaTel = sirket?.telefon ? `Tel: ${sirket.telefon}` : "";
 
-      const w = window.open("", "_blank", "width=800,height=600");
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatura - ${faturaForm.fatura_no}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 15mm;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  @media print {
+    body { padding: 0; }
+    .no-break { page-break-inside: avoid; }
+    @page { @bottom-center { content: counter(page); font-size: 8pt; color: #94a3b8; } }
+  }
+</style>
+</head><body>
+
+<!-- HEADER -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid #1e3a5f">
+  <div style="max-width:55%">
+    <div style="font-size:20px;font-weight:800;color:#1e3a5f;line-height:1.2;letter-spacing:0.3px">${firmaAdi}</div>
+    ${firmaAdres ? `<div style="font-size:9px;color:#64748b;margin-top:5px;line-height:1.5">${firmaAdres}</div>` : ""}
+    ${firmaVergi ? `<div style="font-size:9px;color:#64748b;line-height:1.5">${firmaVergi}</div>` : ""}
+    ${firmaTel ? `<div style="font-size:9px;color:#64748b;line-height:1.5">${firmaTel}</div>` : ""}
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:26px;font-weight:800;color:#1e3a5f;letter-spacing:3px">FATURA</div>
+    <table style="width:auto;margin-left:auto;margin-top:8px;font-size:10px">
+      <tr><td style="padding:2px 10px 2px 0;color:#64748b;font-weight:600;text-align:left">Fatura No:</td><td style="padding:2px 0;font-weight:700;color:#0f172a;text-align:right">${faturaForm.fatura_no}</td></tr>
+      <tr><td style="padding:2px 10px 2px 0;color:#64748b;font-weight:600;text-align:left">Tarih:</td><td style="padding:2px 0;font-weight:700;color:#0f172a;text-align:right">${tarihStr}</td></tr>
+      <tr><td style="padding:2px 10px 2px 0;color:#64748b;font-weight:600;text-align:left">Vade:</td><td style="padding:2px 0;font-weight:600;color:#94a3b8;text-align:right">-</td></tr>
+    </table>
+    <div style="font-size:8px;color:#94a3b8;margin-top:4px;text-transform:uppercase;letter-spacing:1px">${faturaTipi === "GIDEN" ? "Satış Faturası" : "Alış Faturası"}</div>
+  </div>
+</div>
+
+<!-- MÜŞTERİ BİLGİLERİ -->
+<div style="display:flex;gap:20px;margin-top:18px;margin-bottom:22px" class="no-break">
+  <div style="flex:1;background:#f8fafc;padding:14px 16px;border:1px solid #e2e8f0;border-top:3px solid #1e3a5f">
+    <div style="font-size:9px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">SAYIN:</div>
+    <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px">${cariAdi}</div>
+  </div>
+  <div style="flex:1;background:#f8fafc;padding:14px 16px;border:1px solid #e2e8f0;border-top:3px solid #1e3a5f">
+    <div style="font-size:9px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">ÖDEME BİLGİSİ</div>
+    <div style="font-size:10px;color:#64748b;line-height:1.6">Ödeme Şekli: -</div>
+  </div>
+</div>
+
+<!-- KALEMLER TABLOSU -->
+<table class="no-break" style="font-size:10px">
+  <thead>
+    <tr style="background:#1e3a5f;color:#ffffff">
+      <th style="padding:10px 8px;text-align:center;width:30px;font-weight:700;font-size:9px">#</th>
+      <th style="padding:10px 8px;text-align:left;font-weight:700;font-size:9px">ÜRÜN / HİZMET ADI</th>
+      <th style="padding:10px 8px;text-align:center;width:55px;font-weight:700;font-size:9px">MİKTAR</th>
+      <th style="padding:10px 8px;text-align:center;width:50px;font-weight:700;font-size:9px">BİRİM</th>
+      <th style="padding:10px 8px;text-align:right;width:85px;font-weight:700;font-size:9px">BİRİM FİYAT</th>
+      <th style="padding:10px 8px;text-align:center;width:45px;font-weight:700;font-size:9px">KDV%</th>
+      <th style="padding:10px 8px;text-align:right;width:95px;font-weight:700;font-size:9px">TUTAR</th>
+    </tr>
+  </thead>
+  <tbody>${kalemRows}</tbody>
+</table>
+
+<!-- TOPLAM BÖLÜMÜ -->
+<div style="display:flex;justify-content:flex-end;margin-top:16px" class="no-break">
+  <div style="width:280px">
+    <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:11px">
+      <span style="color:#64748b;font-weight:600">Ara Toplam</span>
+      <span style="font-weight:700;color:#334155">${fmt(araToplamHesapla())} TL</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:11px">
+      <span style="color:#64748b;font-weight:600">KDV Toplam</span>
+      <span style="font-weight:700;color:#ea580c">${fmt(kdvToplamHesapla())} TL</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:12px;font-size:15px;background:#1e3a5f;color:#ffffff;margin-top:6px">
+      <span style="font-weight:800;letter-spacing:0.5px">GENEL TOPLAM</span>
+      <span style="font-weight:800">${fmt(genelToplamHesapla())} TL</span>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div style="display:flex;justify-content:space-between;margin-top:40px;gap:20px" class="no-break">
+  <div style="flex:1">
+    <div style="font-size:9px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Notlar / Açıklama</div>
+    <div style="border:1px solid #e2e8f0;padding:10px;min-height:55px;font-size:10px;color:#94a3b8;background:#fafbfc"></div>
+  </div>
+  <div style="flex:1">
+    <div style="font-size:9px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Banka Bilgileri</div>
+    <div style="border:1px solid #e2e8f0;padding:10px;min-height:55px;font-size:10px;color:#94a3b8;background:#fafbfc"></div>
+  </div>
+  <div style="width:180px;text-align:center">
+    <div style="font-size:9px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">Kaşe / İmza</div>
+    <div style="border:1px solid #e2e8f0;min-height:55px;background:#fafbfc"></div>
+  </div>
+</div>
+
+<div style="text-align:center;margin-top:28px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8px;color:#94a3b8;letter-spacing:0.5px">
+  Bu belge elektronik ortamda oluşturulmuştur.
+</div>
+
+</body></html>`;
+
+      const w = window.open("", "_blank", "width=820,height=700");
       if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
       w.document.write(html);
       w.document.close();
       w.focus();
-      setTimeout(() => { w.print(); w.close(); }, 400);
+      setTimeout(() => { w.print(); w.close(); }, 500);
   };
 
   const kaydet = async () => {

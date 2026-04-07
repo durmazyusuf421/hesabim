@@ -3,10 +3,12 @@ import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import Link from "next/link";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line } from "recharts";
 
 interface SiparisData { id: number; alici_firma_id?: number; toplam_tutar: string | number | null; durum: string; created_at?: string; siparis_no?: string; }
-interface AylikVeri { ay: string; tutar: number; }
+interface AylikVeri { ay: string; tutar: number; siparisSayisi: number; oncekiDegisim?: number; }
+interface TopUrun { urunAdi: string; miktar: number; tutar: number; }
+interface TopMusteri { musteriAdi: string; tutar: number; siparisSayisi: number; }
 
 const parseTutar = (val: string | number | null | undefined): number => {
     if (!val) return 0;
@@ -33,6 +35,12 @@ export default function AnaSayfa() {
     const [vadesiGecmisCek, setVadesiGecmisCek] = useState(0);
     const [bugunkuZiyaret, setBugunkuZiyaret] = useState(0);
     const [platinMusteri, setPlatinMusteri] = useState(0);
+    // Yeni grafikler
+    const [topUrunler, setTopUrunler] = useState<TopUrun[]>([]);
+    const [topMusteriler, setTopMusteriler] = useState<TopMusteri[]>([]);
+    const [bugunFaturaSayisi, setBugunFaturaSayisi] = useState(0);
+    const [bugunFaturaTutar, setBugunFaturaTutar] = useState(0);
+    const [bugunYeniMusteri, setBugunYeniMusteri] = useState(0);
     // Hedef takibi
     const [hedefCiro, setHedefCiro] = useState(0);
     const [hedefSiparis, setHedefSiparis] = useState(0);
@@ -79,6 +87,51 @@ export default function AnaSayfa() {
                 setBugunkuZiyaret(ziyaretCount || 0);
                 const { count: platinCount } = await supabase.from("firmalar").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", sirketId).eq("musteri_seviyesi", "PLATİN");
                 setPlatinMusteri(platinCount || 0);
+                // Bugünün fatura özeti
+                const { data: bugunFaturaData } = await supabase.from("faturalar").select("toplam_tutar").eq("sirket_id", sirketId).gte("created_at", bugunStr + "T00:00:00");
+                if (bugunFaturaData) {
+                    setBugunFaturaSayisi(bugunFaturaData.length);
+                    setBugunFaturaTutar(bugunFaturaData.reduce((a, f) => a + parseTutar(f.toplam_tutar), 0));
+                }
+                const { count: bugunYeniCount } = await supabase.from("firmalar").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", sirketId).gte("created_at", bugunStr + "T00:00:00");
+                setBugunYeniMusteri(bugunYeniCount || 0);
+
+                // Son 30 gün - En çok satan ürünler ve en iyi müşteriler
+                const otuzGunOnce = new Date(); otuzGunOnce.setDate(otuzGunOnce.getDate() - 30);
+                const otuzGunStr = otuzGunOnce.toISOString().split("T")[0];
+                const { data: sonSiparisler } = await supabase.from("siparisler").select("id, alici_firma_id, toplam_tutar").eq("satici_sirket_id", sirketId).gte("created_at", otuzGunStr).neq("durum", "IPTAL");
+                const sonSipIds = (sonSiparisler || []).map(s => s.id);
+
+                // Top ürünler
+                if (sonSipIds.length > 0) {
+                    const { data: kalemData } = await supabase.from("siparis_kalemleri").select("urun_adi, miktar, toplam_fiyat").in("siparis_id", sonSipIds);
+                    if (kalemData && kalemData.length > 0) {
+                        const urunMap: Record<string, { miktar: number; tutar: number }> = {};
+                        kalemData.forEach(k => {
+                            const ad = k.urun_adi || "Bilinmiyor";
+                            if (!urunMap[ad]) urunMap[ad] = { miktar: 0, tutar: 0 };
+                            urunMap[ad].miktar += Number(k.miktar) || 0;
+                            urunMap[ad].tutar += parseTutar(k.toplam_fiyat);
+                        });
+                        const sorted = Object.entries(urunMap).sort((a, b) => b[1].tutar - a[1].tutar).slice(0, 5);
+                        setTopUrunler(sorted.map(([urunAdi, v]) => ({ urunAdi, miktar: v.miktar, tutar: v.tutar })));
+                    }
+                }
+
+                // Top müşteriler
+                if (sonSiparisler && sonSiparisler.length > 0) {
+                    const mustMap: Record<number, { tutar: number; sayi: number }> = {};
+                    sonSiparisler.forEach(s => {
+                        const fid = s.alici_firma_id;
+                        if (!fid) return;
+                        if (!mustMap[fid]) mustMap[fid] = { tutar: 0, sayi: 0 };
+                        mustMap[fid].tutar += parseTutar(s.toplam_tutar);
+                        mustMap[fid].sayi += 1;
+                    });
+                    const sorted = Object.entries(mustMap).sort((a, b) => b[1].tutar - a[1].tutar).slice(0, 5);
+                    setTopMusteriler(sorted.map(([fid, v]) => ({ musteriAdi: map[Number(fid)] || "Bilinmiyor", tutar: v.tutar, siparisSayisi: v.sayi })));
+                }
+
                 // Hedef takibi
                 const simdi = new Date();
                 const buAy = simdi.getMonth() + 1;
@@ -113,15 +166,22 @@ export default function AnaSayfa() {
 
     const aylikGrafik = useMemo((): AylikVeri[] => {
         const ayIsimleri = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-        const sonAltiAy: AylikVeri[] = [];
-        for (let i = 5; i >= 0; i--) {
+        const sonOnIkiAy: AylikVeri[] = [];
+        for (let i = 11; i >= 0; i--) {
             const d = new Date(); d.setMonth(d.getMonth() - i);
             const ayKey = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
             const ayIsim = `${ayIsimleri[d.getMonth()]} ${d.getFullYear().toString().slice(2)}`;
-            const ayToplam = siparisler.filter(s => s.created_at?.startsWith(ayKey) && s.durum !== "IPTAL").reduce((acc, s) => acc + parseTutar(s.toplam_tutar), 0);
-            sonAltiAy.push({ ay: ayIsim, tutar: ayToplam });
+            const aySiparisler = siparisler.filter(s => s.created_at?.startsWith(ayKey) && s.durum !== "IPTAL");
+            const ayToplam = aySiparisler.reduce((acc, s) => acc + parseTutar(s.toplam_tutar), 0);
+            sonOnIkiAy.push({ ay: ayIsim, tutar: ayToplam, siparisSayisi: aySiparisler.length });
         }
-        return sonAltiAy;
+        // Önceki aya göre değişim % hesapla
+        for (let i = 0; i < sonOnIkiAy.length; i++) {
+            if (i === 0) { sonOnIkiAy[i].oncekiDegisim = 0; continue; }
+            const onceki = sonOnIkiAy[i - 1].tutar;
+            sonOnIkiAy[i].oncekiDegisim = onceki > 0 ? Math.round(((sonOnIkiAy[i].tutar - onceki) / onceki) * 100) : 0;
+        }
+        return sonOnIkiAy;
     }, [siparisler]);
 
     const sonBesSiparis = useMemo(() => siparisler.slice(0, 5).map(s => ({ ...s, musteriAdi: (s.alici_firma_id && firmaMap[s.alici_firma_id]) || "Bilinmiyor" })), [siparisler, firmaMap]);
@@ -301,26 +361,157 @@ export default function AnaSayfa() {
                     </div>
                 )}
 
+                {/* BUGÜNÜN ÖZETİ */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="card-kurumsal p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-[#eff6ff] text-[#3b82f6] flex items-center justify-center shrink-0"><i className="fas fa-file-invoice text-sm" /></div>
+                            <div>
+                                <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Bugünkü Faturalar</div>
+                                <div className="text-[16px] font-bold text-[#0f172a]">{bugunFaturaSayisi} <span className="text-[11px] font-medium text-[#94a3b8]">adet</span></div>
+                                <div className="text-[11px] font-semibold text-[#3b82f6]">₺{fmtTL(bugunFaturaTutar)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card-kurumsal p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-[#f0fdf4] text-[#059669] flex items-center justify-center shrink-0"><i className="fas fa-user-plus text-sm" /></div>
+                            <div>
+                                <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Yeni Müşteri</div>
+                                <div className="text-[16px] font-bold text-[#0f172a]">{bugunYeniMusteri} <span className="text-[11px] font-medium text-[#94a3b8]">bugün</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card-kurumsal p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-[#fefce8] text-[#f59e0b] flex items-center justify-center shrink-0"><i className="fas fa-clock text-sm" /></div>
+                            <div>
+                                <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Bekleyen Sipariş</div>
+                                <div className="text-[16px] font-bold text-[#0f172a]">{bekleyenSayisi} <span className="text-[11px] font-medium text-[#94a3b8]">adet</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card-kurumsal p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-[#faf5ff] text-[#7c3aed] flex items-center justify-center shrink-0"><i className="fas fa-shopping-cart text-sm" /></div>
+                            <div>
+                                <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Bugünkü Sipariş</div>
+                                <div className="text-[16px] font-bold text-[#0f172a]">{bugunkuSiparisler.length} <span className="text-[11px] font-medium text-[#94a3b8]">adet</span></div>
+                                <div className="text-[11px] font-semibold text-[#7c3aed]">₺{fmtTL(bugunkuCiro)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* AYLIK SATIŞ GRAFİĞİ - ÇİFT EKSEN */}
                 <div className="card-kurumsal">
                     <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--c-border)" }}>
                         <div>
                             <div className="text-[13px] font-semibold text-[#0f172a]">Aylık Satış Grafiği</div>
-                            <div className="text-[10px] text-[#94a3b8] mt-0.5 tracking-wide">Son 6 aylık ciro dağılımı</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5 tracking-wide">Son 12 aylık ciro ve sipariş dağılımı</div>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] font-medium text-[#94a3b8]">
-                            <div className="w-3 h-3" style={{ background: "#1e293b" }} /> Ciro (TL)
+                        <div className="flex items-center gap-4 text-[10px] font-medium text-[#94a3b8]">
+                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 inline-block" style={{ background: "#0f172a" }} /> Ciro</span>
+                            <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 inline-block" style={{ background: "#3b82f6" }} /> Sipariş</span>
                         </div>
                     </div>
-                    <div className="p-4 md:p-5" style={{ minHeight: 220, height: 280 }}>
+                    <div className="p-4 md:p-5" style={{ minHeight: 220, height: 300 }}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={aylikGrafik} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                            <ComposedChart data={aylikGrafik} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="ay" tick={{ fontSize: 11, fontWeight: 600, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
-                                <YAxis tick={{ fontSize: 10, fontWeight: 500, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()} />
-                                <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "none", borderRadius: 0, padding: "8px 14px", fontSize: 12 }} labelStyle={{ color: "#64748b", fontSize: 11, fontWeight: 600 }} itemStyle={{ color: "#f1f5f9", fontSize: 13, fontWeight: 700 }} formatter={(value) => [`₺${Number(value).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, "Ciro"]} />
-                                <Bar dataKey="tutar" fill="#0f172a" radius={[2, 2, 0, 0]} maxBarSize={40} />
-                            </BarChart>
+                                <XAxis dataKey="ay" tick={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                                <YAxis yAxisId="left" tick={{ fontSize: 10, fontWeight: 500, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()} />
+                                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fontWeight: 500, fill: "#3b82f6" }} axisLine={false} tickLine={false} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: "#0f172a", border: "none", borderRadius: 0, padding: "10px 16px", fontSize: 12 }}
+                                    labelStyle={{ color: "#64748b", fontSize: 11, fontWeight: 600 }}
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    formatter={(value: any, name: any, props: any) => {
+                                        const v = Number(value) || 0;
+                                        if (name === "tutar") {
+                                            const degisim = props?.payload?.oncekiDegisim;
+                                            const degisimStr = degisim !== undefined && degisim !== 0 ? ` (${degisim > 0 ? "+" : ""}${degisim}%)` : "";
+                                            return [`₺${fmtTL(v)}${degisimStr}`, "Ciro"];
+                                        }
+                                        return [v, "Sipariş"];
+                                    }}
+                                    itemStyle={{ color: "#f1f5f9", fontSize: 12, fontWeight: 600 }}
+                                />
+                                <Bar yAxisId="left" dataKey="tutar" fill="#0f172a" radius={[2, 2, 0, 0]} maxBarSize={32} />
+                                <Line yAxisId="right" type="monotone" dataKey="siparisSayisi" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} />
+                            </ComposedChart>
                         </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* EN ÇOK SATAN ÜRÜNLER & EN İYİ MÜŞTERİLER */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* En Çok Satan Ürünler */}
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">En Çok Satan Ürünler</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5 tracking-wide">Son 30 gün · Top 5</div>
+                        </div>
+                        <div className="p-4">
+                            {topUrunler.length === 0 ? (
+                                <div className="text-center text-[#94a3b8] text-[11px] py-8 tracking-widest uppercase">Veri bulunamadı</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {topUrunler.map((u, i) => {
+                                        const maxTutar = topUrunler[0]?.tutar || 1;
+                                        const yuzde = Math.round((u.tutar / maxTutar) * 100);
+                                        return (
+                                            <div key={i}>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[11px] font-semibold text-[#0f172a] truncate max-w-[60%]">{u.urunAdi}</span>
+                                                    <span className="text-[11px] font-bold text-[#0f172a] whitespace-nowrap">₺{fmtTL(u.tutar)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-2 bg-[#f1f5f9]">
+                                                        <div className="h-full transition-all duration-500" style={{ width: `${yuzde}%`, background: "#0f172a" }} />
+                                                    </div>
+                                                    <span className="text-[9px] font-semibold text-[#94a3b8] whitespace-nowrap w-14 text-right">{u.miktar} adet</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* En İyi Müşteriler */}
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">En İyi Müşteriler</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5 tracking-wide">Son 30 gün · Top 5</div>
+                        </div>
+                        <div className="p-4">
+                            {topMusteriler.length === 0 ? (
+                                <div className="text-center text-[#94a3b8] text-[11px] py-8 tracking-widest uppercase">Veri bulunamadı</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {topMusteriler.map((m, i) => {
+                                        const maxTutar = topMusteriler[0]?.tutar || 1;
+                                        const yuzde = Math.round((m.tutar / maxTutar) * 100);
+                                        return (
+                                            <div key={i}>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[11px] font-semibold text-[#0f172a] truncate max-w-[60%]">{m.musteriAdi}</span>
+                                                    <span className="text-[11px] font-bold text-[#0f172a] whitespace-nowrap">₺{fmtTL(m.tutar)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-2 bg-[#f1f5f9]">
+                                                        <div className="h-full transition-all duration-500" style={{ width: `${yuzde}%`, background: "#3b82f6" }} />
+                                                    </div>
+                                                    <span className="text-[9px] font-semibold text-[#94a3b8] whitespace-nowrap w-14 text-right">{m.siparisSayisi} sipariş</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
