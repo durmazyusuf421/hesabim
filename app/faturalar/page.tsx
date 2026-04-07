@@ -44,6 +44,7 @@ export default function FaturaMerkezi() {
   const [faturaTipi, setFaturaTipi] = useState<"GELEN" | "GIDEN">("GIDEN");
   const [faturaForm, setFaturaForm] = useState<FaturaFormState>({ fatura_no: "", tarih: new Date().toISOString().split('T')[0], cari_id: "" });
   const [faturaKalemleri, setFaturaKalemleri] = useState<FaturaKalemi[]>([]);
+  const [yazdirModalAcik, setYazdirModalAcik] = useState(false);
 
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
@@ -146,6 +147,11 @@ export default function FaturaMerkezi() {
   const araToplamHesapla = () => faturaKalemleri.reduce((acc, k) => acc + (k.miktar * k.birim_fiyat), 0);
   const kdvToplamHesapla = () => faturaKalemleri.reduce((acc, k) => acc + ((k.miktar * k.birim_fiyat) * (k.kdv_orani / 100)), 0);
   const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
+
+  const faturaYazdir = () => {
+      setYazdirModalAcik(true);
+      setTimeout(() => { window.print(); }, 300);
+  };
 
   const kaydet = async () => {
       if (!faturaForm.cari_id) { toast.error("Lütfen Cari (Müşteri/Tedarikçi) seçin!"); return; }
@@ -353,7 +359,7 @@ export default function FaturaMerkezi() {
                  {modalMod === "goruntule" && (
                      <button onClick={() => setModalMod("duzenle")} className="btn-secondary text-xs font-bold"><i className="fas fa-edit mr-1"></i> Düzenle</button>
                  )}
-                 <button onClick={() => window.print()} className="btn-secondary text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
+                 <button onClick={faturaYazdir} className="btn-secondary text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
                  <button onClick={() => setModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
               </div>
             </div>
@@ -442,6 +448,142 @@ export default function FaturaMerkezi() {
         </div>
       )}
       <OnayModal />
+
+      {/* --- FATURA YAZDIR GÖRÜNÜMÜ --- */}
+      {yazdirModalAcik && (
+        <>
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #fatura-print, #fatura-print * { visibility: visible !important; }
+              #fatura-print { position: absolute; left: 0; top: 0; width: 100%; }
+            }
+          `}</style>
+          <div className="fixed inset-0 bg-black/50 z-[100] flex items-start justify-center overflow-auto print:hidden" onClick={() => setYazdirModalAcik(false)}>
+            <div className="my-8 bg-white shadow-2xl max-w-[210mm] w-full" onClick={e => e.stopPropagation()}>
+              <div className="p-4 flex justify-between items-center border-b" style={{ background: "#f8fafc" }}>
+                <span className="text-sm font-bold text-slate-700">Fatura Önizleme</span>
+                <div className="flex gap-2">
+                  <button onClick={() => window.print()} className="btn-primary text-xs"><i className="fas fa-print mr-1"></i> Yazdır</button>
+                  <button onClick={() => setYazdirModalAcik(false)} className="btn-secondary text-xs text-red-600"><i className="fas fa-times mr-1"></i> Kapat</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="fatura-print" style={{ fontFamily: "Arial, sans-serif", color: "#1a1a1a", background: "#fff", padding: "40px", maxWidth: "210mm", margin: "0 auto" }} className="hidden print:block">
+            {/* HEADER */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: "16px", borderBottom: "3px solid #1e3a5f" }}>
+              <div>
+                <div style={{ fontSize: "22px", fontWeight: 700, color: "#1e3a5f", lineHeight: 1.2 }}>{aktifSirket?.isletme_adi || aktifSirket?.unvan || "Firma Adı"}</div>
+                {aktifSirket?.unvan && aktifSirket.unvan !== aktifSirket.isletme_adi && (
+                  <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>{aktifSirket.unvan}</div>
+                )}
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "28px", fontWeight: 700, color: "#1e3a5f", letterSpacing: "2px" }}>FATURA</div>
+                <div style={{ fontSize: "12px", color: "#475569", marginTop: "4px" }}>
+                  <span style={{ fontWeight: 600 }}>No:</span> {faturaForm.fatura_no}
+                </div>
+                <div style={{ fontSize: "12px", color: "#475569" }}>
+                  <span style={{ fontWeight: 600 }}>Tarih:</span> {new Date(faturaForm.tarih).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}
+                </div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>
+                  {faturaTipi === "GIDEN" ? "Satış Faturası" : "Alış Faturası"}
+                </div>
+              </div>
+            </div>
+
+            {/* SATICI & ALICI BİLGİLERİ */}
+            <div style={{ display: "flex", gap: "32px", marginTop: "20px", marginBottom: "24px" }}>
+              <div style={{ flex: 1, background: "#f8fafc", padding: "14px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", borderBottom: "1px solid #cbd5e1", paddingBottom: "4px" }}>Satıcı</div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>{aktifSirket?.isletme_adi || "-"}</div>
+                {aktifSirket?.adres && <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>{aktifSirket.adres}</div>}
+                {(aktifSirket?.il || aktifSirket?.ilce) && <div style={{ fontSize: "11px", color: "#475569" }}>{[aktifSirket.ilce, aktifSirket.il].filter(Boolean).join(" / ")}</div>}
+                {aktifSirket?.vergi_dairesi && <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>V.D.: {aktifSirket.vergi_dairesi}</div>}
+                {aktifSirket?.vergi_no && <div style={{ fontSize: "11px", color: "#475569" }}>V.K.N.: {aktifSirket.vergi_no}</div>}
+                {aktifSirket?.telefon && <div style={{ fontSize: "11px", color: "#475569", marginTop: "4px" }}>Tel: {aktifSirket.telefon}</div>}
+              </div>
+              <div style={{ flex: 1, background: "#f8fafc", padding: "14px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", borderBottom: "1px solid #cbd5e1", paddingBottom: "4px" }}>Alıcı</div>
+                <div style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b" }}>
+                  {(() => { const f = faturalar.find(f => f.id === seciliFaturaId); return f?.cari_adi || firmalar.find(fr => fr.id === Number(faturaForm.cari_id))?.unvan || "-"; })()}
+                </div>
+              </div>
+            </div>
+
+            {/* KALEM TABLOSU */}
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+              <thead>
+                <tr style={{ background: "#1e3a5f", color: "#fff" }}>
+                  <th style={{ padding: "8px 6px", textAlign: "center", width: "30px", fontWeight: 600 }}>#</th>
+                  <th style={{ padding: "8px 6px", textAlign: "left", fontWeight: 600 }}>Ürün / Hizmet</th>
+                  <th style={{ padding: "8px 6px", textAlign: "center", width: "60px", fontWeight: 600 }}>Miktar</th>
+                  <th style={{ padding: "8px 6px", textAlign: "center", width: "55px", fontWeight: 600 }}>Birim</th>
+                  <th style={{ padding: "8px 6px", textAlign: "right", width: "90px", fontWeight: 600 }}>Birim Fiyat</th>
+                  <th style={{ padding: "8px 6px", textAlign: "center", width: "50px", fontWeight: 600 }}>KDV%</th>
+                  <th style={{ padding: "8px 6px", textAlign: "right", width: "100px", fontWeight: 600 }}>Tutar</th>
+                </tr>
+              </thead>
+              <tbody>
+                {faturaKalemleri.map((k, i) => {
+                  const araTutar = k.miktar * k.birim_fiyat;
+                  const kdvTutari = araTutar * (k.kdv_orani / 100);
+                  const toplamTutar = araTutar + kdvTutari;
+                  return (
+                    <tr key={i} style={{ background: i % 2 === 0 ? "#fff" : "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                      <td style={{ padding: "7px 6px", textAlign: "center", color: "#94a3b8", fontWeight: 600 }}>{i + 1}</td>
+                      <td style={{ padding: "7px 6px", fontWeight: 500 }}>{k.urun_adi}</td>
+                      <td style={{ padding: "7px 6px", textAlign: "center", fontWeight: 600 }}>{k.miktar}</td>
+                      <td style={{ padding: "7px 6px", textAlign: "center", textTransform: "uppercase" }}>{k.birim}</td>
+                      <td style={{ padding: "7px 6px", textAlign: "right", fontWeight: 600 }}>{Number(k.birim_fiyat).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+                      <td style={{ padding: "7px 6px", textAlign: "center" }}>%{k.kdv_orani}</td>
+                      <td style={{ padding: "7px 6px", textAlign: "right", fontWeight: 700 }}>{toplamTutar.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* TOPLAMLAR */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+              <div style={{ width: "260px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: "12px" }}>
+                  <span style={{ color: "#64748b", fontWeight: 600 }}>Ara Toplam</span>
+                  <span style={{ fontWeight: 600 }}>{araToplamHesapla().toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: "12px" }}>
+                  <span style={{ color: "#64748b", fontWeight: 600 }}>KDV Toplam</span>
+                  <span style={{ fontWeight: 600, color: "#ea580c" }}>{kdvToplamHesapla().toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", fontSize: "16px", background: "#1e3a5f", color: "#fff", marginTop: "4px", paddingLeft: "10px", paddingRight: "10px" }}>
+                  <span style={{ fontWeight: 700 }}>GENEL TOPLAM</span>
+                  <span style={{ fontWeight: 700 }}>{genelToplamHesapla().toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                </div>
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", gap: "32px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>Notlar</div>
+                <div style={{ border: "1px solid #e2e8f0", padding: "10px", minHeight: "50px", fontSize: "11px", color: "#64748b" }}>
+                  &nbsp;
+                </div>
+              </div>
+              <div style={{ width: "200px", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", fontWeight: 700, color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>Kaşe / İmza</div>
+                <div style={{ borderBottom: "1px solid #1e3a5f", marginTop: "60px" }}></div>
+              </div>
+            </div>
+
+            <div style={{ textAlign: "center", marginTop: "32px", paddingTop: "12px", borderTop: "1px solid #e2e8f0", fontSize: "9px", color: "#94a3b8", letterSpacing: "0.5px" }}>
+              Bu fatura elektronik ortamda oluşturulmuştur.
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }
