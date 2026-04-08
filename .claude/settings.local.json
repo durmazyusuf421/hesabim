@@ -38,7 +38,9 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(while read:*)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(find C:/Users/durma/OneDrive/Desktop/muhasebe-pro -name *.sql -not -path */node_modules/* -exec grep -h \"CREATE TABLE\\\\|ALTER TABLE\" {})",
+      "Bash(2)"
     ]
   }
 }

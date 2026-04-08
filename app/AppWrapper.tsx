@@ -66,6 +66,10 @@ const SAYFA_BASLIK: Record<string, { baslik: string; alt: string }> = {
     "/stok/toplu-fiyat": { baslik: "Toplu Fiyat", alt: "Toplu fiyat güncelleme" },
     "/cari": { baslik: "Cari Kartları", alt: "Müşteri ve tedarikçi hesapları" },
     "/ekstre": { baslik: "Cari Hareketler", alt: "Hesap ekstresi ve yürüyen bakiye" },
+    "/yevmiye": { baslik: "Yevmiye Defteri", alt: "Muhasebe yevmiye kayıtları" },
+    "/gelir-tablosu": { baslik: "Gelir Tablosu", alt: "Dönemsel gelir-gider analizi" },
+    "/mizan": { baslik: "Mizan", alt: "Hesap bazlı borç-alacak dengesi" },
+    "/bilanco": { baslik: "Bilanço", alt: "Aktif-Pasif varlık ve kaynak dengesi" },
     "/raporlar": { baslik: "Raporlar", alt: "Satış, tahsilat ve performans analizleri" },
     "/ayarlar": { baslik: "Sistem Ayarları", alt: "Firma bilgileri ve personel yönetimi" },
     "/portal/pos": { baslik: "Hızlı Satış (POS)", alt: "Perakende satış terminali" },
@@ -294,7 +298,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
             {mobilMenuAcik && <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setMobilMenuAcik(false)} />}
 
             {/* ═══ SIDEBAR ═══ */}
-            <aside className={`w-[var(--sidebar-w)] flex flex-col shrink-0 print:hidden fixed md:static inset-y-0 left-0 z-50 transition-transform duration-200 ${mobilMenuAcik ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: "var(--c-sidebar)" }}>
+            <aside className={`w-[var(--sidebar-w)] flex flex-col shrink-0 print:hidden fixed md:static top-0 bottom-0 left-0 z-50 transition-transform duration-200 overflow-hidden h-[100dvh] md:h-auto ${mobilMenuAcik ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`} style={{ background: "var(--c-sidebar)" }}>
                 {/* Logo / Firma */}
                 <div className="h-14 flex items-center justify-between px-3 shrink-0" style={{ borderBottom: "1px solid var(--c-sidebar-border)" }}>
                     <div className="min-w-0 flex-1">
@@ -308,7 +312,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 </div>
 
                 {/* Menü */}
-                <nav className="flex-1 py-2 overflow-y-auto custom-scrollbar">
+                <nav className="flex-1 min-h-0 py-2 overflow-y-auto custom-scrollbar">
                     {menu.map((item, i) => {
                         const yetkili = menuYetkiliMi(item);
                         const active = pathname === item.href;

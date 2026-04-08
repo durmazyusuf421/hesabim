@@ -13,8 +13,13 @@ interface BankaHareketiRaw { id: number; islem_tipi: string; tutar: number; tari
 interface CekSenetRaw { id: number; yon: string; tutar: number; durum: string; vade_tarihi: string; }
 interface SiparisKalemiRaw { id: number; alis_fiyati: number; miktar: number; siparis_id: number; kdv_orani?: number; birim_fiyat?: number; }
 
-type Sekme = "genel" | "kar-zarar" | "kdv" | "plasiyer" | "masraf";
+type Sekme = "genel" | "kar-zarar" | "kdv" | "plasiyer" | "masraf" | "gelir-tablosu" | "yevmiye" | "mizan" | "bilanco";
 interface MasrafRaw { id: number; masraf_kategorisi: string; tutar: number; kdv_tutari: number; tarih: string; }
+interface FaturaRaw2 { id: number; tip: string; genel_toplam: number; tarih: string; }
+interface YevmiyeRaw { id: number; tarih: string; fis_no: string; aciklama: string; hesap_kodu: string; hesap_adi: string; borc: number; alacak: number; kaynak: string; }
+interface MizanSatir { hesap_kodu: string; hesap_adi: string; toplamBorc: number; toplamAlacak: number; borcBakiye: number; alacakBakiye: number; }
+const HESAP_SIRA = ["100", "102", "120", "153", "320", "391", "600", "770"];
+const KAYNAK_RENK: Record<string, string> = { FATURA: "#3b82f6", TAHSILAT: "#059669", MASRAF: "#dc2626", KASA: "#f59e0b", BANKA: "#8b5cf6", MANUEL: "#64748b" };
 
 const parseTutar = (val: string | number | null | undefined): number => {
     if (!val) return 0;
@@ -73,6 +78,10 @@ export default function RaporlarSayfasi() {
     const [plasiyerYukleniyor, setPlasiyerYukleniyor] = useState(false);
     // Masraf verileri
     const [masraflar, setMasraflar] = useState<MasrafRaw[]>([]);
+    // Fatura verileri (gelir tablosu)
+    const [raporFaturalar, setRaporFaturalar] = useState<FaturaRaw2[]>([]);
+    // Yevmiye verileri
+    const [yevmiyeKayitlari, setYevmiyeKayitlari] = useState<YevmiyeRaw[]>([]);
 
     const sirketId = aktifSirket?.id;
 
@@ -119,6 +128,12 @@ export default function RaporlarSayfasi() {
             // Masraf verileri
             const { data: masrafData } = await supabase.from("masraflar").select("id, masraf_kategorisi, tutar, kdv_tutari, tarih").eq("sirket_id", sirketId).order("tarih", { ascending: false });
             setMasraflar(masrafData || []);
+            // Fatura verileri (gelir tablosu)
+            const { data: faturaData } = await supabase.from("faturalar").select("id, tip, genel_toplam, tarih").eq("sirket_id", sirketId);
+            setRaporFaturalar(faturaData || []);
+            // Yevmiye verileri
+            const { data: yevmiyeData } = await supabase.from("yevmiye_kayitlari").select("id, tarih, fis_no, aciklama, hesap_kodu, hesap_adi, borc, alacak, kaynak").eq("sirket_id", sirketId).gte("tarih", baslangic).lte("tarih", bitis + "T23:59:59").order("tarih", { ascending: false }).order("id", { ascending: false });
+            setYevmiyeKayitlari(yevmiyeData || []);
         } catch { /* */ }
         setYukleniyor(false);
     }
@@ -345,6 +360,60 @@ export default function RaporlarSayfasi() {
 
     const toplamMasraf = useMemo(() => masraflar.reduce((a, m) => a + Number(m.tutar || 0) + Number(m.kdv_tutari || 0), 0), [masraflar]);
 
+    // GELİR TABLOSU HESAPLAMALARI
+    const gtBrutSatislar = useMemo(() => raporFaturalar.filter(f => f.tip === "GIDEN").reduce((a, f) => a + Number(f.genel_toplam || 0), 0), [raporFaturalar]);
+    const gtAlislar = useMemo(() => raporFaturalar.filter(f => f.tip === "GELEN").reduce((a, f) => a + Number(f.genel_toplam || 0), 0), [raporFaturalar]);
+    const gtNetSatislar = gtBrutSatislar;
+    const gtBrutKar = gtNetSatislar - gtAlislar;
+    const gtFaaliyetGiderleri = toplamMasraf;
+    const gtNetKar = gtBrutKar - gtFaaliyetGiderleri;
+
+    // YEVMIYE TOPLAMI
+    const yevToplamBorc = useMemo(() => yevmiyeKayitlari.reduce((a, k) => a + Number(k.borc || 0), 0), [yevmiyeKayitlari]);
+    const yevToplamAlacak = useMemo(() => yevmiyeKayitlari.reduce((a, k) => a + Number(k.alacak || 0), 0), [yevmiyeKayitlari]);
+
+    // MİZAN HESAPLA
+    const mizanSatirlari = useMemo((): MizanSatir[] => {
+        const map: Record<string, { hesap_adi: string; borc: number; alacak: number }> = {};
+        yevmiyeKayitlari.forEach(k => {
+            const kod = k.hesap_kodu || "999";
+            if (!map[kod]) map[kod] = { hesap_adi: k.hesap_adi || kod, borc: 0, alacak: 0 };
+            map[kod].borc += Number(k.borc || 0);
+            map[kod].alacak += Number(k.alacak || 0);
+        });
+        return Object.entries(map).map(([kod, v]) => {
+            const fark = v.borc - v.alacak;
+            return { hesap_kodu: kod, hesap_adi: v.hesap_adi, toplamBorc: v.borc, toplamAlacak: v.alacak, borcBakiye: fark > 0 ? fark : 0, alacakBakiye: fark < 0 ? Math.abs(fark) : 0 };
+        }).sort((a, b) => {
+            const ai = HESAP_SIRA.indexOf(a.hesap_kodu); const bi = HESAP_SIRA.indexOf(b.hesap_kodu);
+            return (ai >= 0 ? ai : 100) - (bi >= 0 ? bi : 100);
+        });
+    }, [yevmiyeKayitlari]);
+    const mizBorc = useMemo(() => mizanSatirlari.reduce((a, s) => a + s.toplamBorc, 0), [mizanSatirlari]);
+    const mizAlacak = useMemo(() => mizanSatirlari.reduce((a, s) => a + s.toplamAlacak, 0), [mizanSatirlari]);
+    const mizDengeli = Math.abs(mizBorc - mizAlacak) < 0.01;
+
+    // BİLANCO HESAPLA
+    const bilBakiye = useMemo(() => {
+        const map: Record<string, number> = {};
+        yevmiyeKayitlari.forEach(k => {
+            const kod = k.hesap_kodu || "999";
+            map[kod] = (map[kod] || 0) + Number(k.borc || 0) - Number(k.alacak || 0);
+        });
+        return (kod: string) => map[kod] || 0;
+    }, [yevmiyeKayitlari]);
+    const bilKasa = Math.max(bilBakiye("100"), 0);
+    const bilBanka = Math.max(bilBakiye("102"), 0);
+    const bilAlici = Math.max(bilBakiye("120"), 0);
+    const bilTicMal = Math.max(bilBakiye("153"), 0);
+    const bilToplamAktif = bilKasa + bilBanka + bilAlici + bilTicMal;
+    const bilSatici = Math.max(-bilBakiye("320"), 0);
+    const bilSatisGeliri = Math.max(-bilBakiye("600"), 0);
+    const bilGiderler = Math.max(bilBakiye("770"), 0);
+    const bilNetKar = bilSatisGeliri - bilGiderler;
+    const bilToplamPasif = bilSatici + bilNetKar;
+    const bilDengeli = Math.abs(bilToplamAktif - bilToplamPasif) < 0.01;
+
     // EXCEL / PDF EXPORT
     const raporExcelExport = () => {
         const cols = [{header:"Ay",key:"ay",width:15},{header:"Ciro (TL)",key:"tutar",width:18}];
@@ -371,7 +440,7 @@ export default function RaporlarSayfasi() {
         <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
             {/* SEKME BAR */}
             <div className="flex items-center gap-0 shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--c-border)", background: "white" }}>
-                {([{ key: "genel", label: "Genel Raporlar", icon: "fa-chart-bar" }, { key: "kar-zarar", label: "Kar / Zarar", icon: "fa-balance-scale" }, { key: "masraf", label: "Masraf Raporu", icon: "fa-receipt" }, { key: "kdv", label: "KDV Beyannamesi", icon: "fa-file-invoice-dollar" }, { key: "plasiyer", label: "Plasiyer Raporu", icon: "fa-user-tie" }] as { key: Sekme; label: string; icon: string }[]).map(s => (
+                {([{ key: "genel", label: "Genel Raporlar", icon: "fa-chart-bar" }, { key: "kar-zarar", label: "Kar / Zarar", icon: "fa-balance-scale" }, { key: "masraf", label: "Masraf Raporu", icon: "fa-receipt" }, { key: "kdv", label: "KDV Beyannamesi", icon: "fa-file-invoice-dollar" }, { key: "plasiyer", label: "Plasiyer Raporu", icon: "fa-user-tie" }, { key: "gelir-tablosu", label: "Gelir Tablosu", icon: "fa-chart-line" }, { key: "yevmiye", label: "Yevmiye", icon: "fa-book" }, { key: "mizan", label: "Mizan", icon: "fa-balance-scale" }, { key: "bilanco", label: "Bilanco", icon: "fa-file-invoice-dollar" }] as { key: Sekme; label: string; icon: string }[]).map(s => (
                     <button key={s.key} onClick={() => setSekme(s.key)}
                         className={`px-3 md:px-5 py-2 md:py-2.5 text-[10px] md:text-[11px] font-semibold transition-colors border-b-2 whitespace-nowrap ${sekme === s.key ? "text-[#0f172a] border-[#0f172a]" : "text-[#94a3b8] border-transparent hover:text-[#64748b]"}`}>
                         <i className={`fas ${s.icon} mr-1 md:mr-1.5 text-[9px] md:text-[10px]`} />{s.label}
@@ -403,7 +472,7 @@ export default function RaporlarSayfasi() {
             </div>
 
             {/* İÇERİK */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5 custom-scrollbar h-0">
 
                 {/* ═══ KAR / ZARAR SEKMESİ ═══ */}
                 {sekme === "kar-zarar" && (
@@ -914,6 +983,198 @@ export default function RaporlarSayfasi() {
                                     <Bar dataKey="gider" fill="#dc2626" name="Gider" radius={[2, 2, 0, 0]} maxBarSize={28} />
                                 </ComposedChart>
                             </ResponsiveContainer>
+                        </div>
+                    </div>
+                </>}
+
+                {sekme === "gelir-tablosu" && <>
+                    {/* NET KAR ÖZET */}
+                    <div className={`p-5 text-center ${gtNetKar >= 0 ? "bg-[#f0fdf4]" : "bg-[#fef2f2]"}`} style={{ border: `2px solid ${gtNetKar >= 0 ? "#bbf7d0" : "#fecaca"}` }}>
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Net Kar / Zarar</div>
+                        <div className={`text-2xl font-bold ${gtNetKar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}`}>{`₺${fmtTL(gtNetKar)}`}</div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* BRÜT SATIŞLAR */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 bg-slate-50 text-xs font-bold text-[#0f172a] uppercase tracking-wider" style={{ borderBottom: "1px solid var(--c-border)" }}>A. Brut Satislar</div>
+                            <div className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                <span className="pl-3 text-slate-600">Yurt Ici Satislar</span>
+                                <span className="font-bold">{`₺${fmtTL(gtBrutSatislar)}`}</span>
+                            </div>
+                            <div className="flex justify-between px-4 py-2 bg-slate-50 text-xs font-bold" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                <span>= NET SATISLAR</span>
+                                <span className={gtNetSatislar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}>{`₺${fmtTL(gtNetSatislar)}`}</span>
+                            </div>
+                        </div>
+
+                        {/* SATIŞLARIN MALİYETİ */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 bg-slate-50 text-xs font-bold text-[#0f172a] uppercase tracking-wider" style={{ borderBottom: "1px solid var(--c-border)" }}>B. Satislarin Maliyeti</div>
+                            <div className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                <span className="pl-3 text-slate-600">Ticari Mal Alislari</span>
+                                <span className="font-bold text-[#dc2626]">{`-₺${fmtTL(gtAlislar)}`}</span>
+                            </div>
+                            <div className="flex justify-between px-4 py-2 bg-slate-50 text-xs font-bold" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                <span>= BRUT KAR / ZARAR</span>
+                                <span className={gtBrutKar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}>{`₺${fmtTL(gtBrutKar)}`}</span>
+                            </div>
+                        </div>
+
+                        {/* FAALİYET GİDERLERİ */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 bg-slate-50 text-xs font-bold text-[#0f172a] uppercase tracking-wider" style={{ borderBottom: "1px solid var(--c-border)" }}>C. Faaliyet Giderleri</div>
+                            <div className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                                <span className="pl-3 text-slate-600">Toplam Masraflar</span>
+                                <span className="font-bold text-[#dc2626]">{`-₺${fmtTL(gtFaaliyetGiderleri)}`}</span>
+                            </div>
+                            <div className="flex justify-between px-4 py-2 bg-slate-50 text-xs font-bold" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                <span>= FAALIYET KARI / ZARARI</span>
+                                <span className={gtNetKar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}>{`₺${fmtTL(gtNetKar)}`}</span>
+                            </div>
+                        </div>
+
+                        {/* ÖZET */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 bg-slate-50 text-xs font-bold text-[#0f172a] uppercase tracking-wider" style={{ borderBottom: "1px solid var(--c-border)" }}>Ozet</div>
+                            <div className="p-4 grid grid-cols-2 gap-3 text-xs">
+                                <div className="flex justify-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="text-slate-500">Satis Faturasi</span><span className="font-bold">{`₺${fmtTL(gtBrutSatislar)}`}</span></div>
+                                <div className="flex justify-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="text-slate-500">Alis Faturasi</span><span className="font-bold text-[#dc2626]">{`₺${fmtTL(gtAlislar)}`}</span></div>
+                                <div className="flex justify-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="text-slate-500">Masraflar</span><span className="font-bold text-[#dc2626]">{`₺${fmtTL(gtFaaliyetGiderleri)}`}</span></div>
+                                <div className="flex justify-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="text-slate-500">Net Kar</span><span className={`font-bold ${gtNetKar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}`}>{`₺${fmtTL(gtNetKar)}`}</span></div>
+                            </div>
+                            {gtNetSatislar > 0 && <div className="px-4 pb-3 text-[10px] text-slate-400 text-center">Kar Marji: %{((gtNetKar / gtNetSatislar) * 100).toFixed(1)}</div>}
+                        </div>
+                    </div>
+                </>}
+
+                {/* YEVMİYE SEKMESİ */}
+                {sekme === "yevmiye" && <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-red-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">Toplam Borc</div>
+                            <div className="text-[16px] font-bold text-[#dc2626]">{`₺${fmtTL(yevToplamBorc)}`}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-emerald-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">Toplam Alacak</div>
+                            <div className="text-[16px] font-bold text-[#059669]">{`₺${fmtTL(yevToplamAlacak)}`}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-amber-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">Fark</div>
+                            <div className={`text-[16px] font-bold ${Math.abs(yevToplamBorc - yevToplamAlacak) < 0.01 ? "text-[#059669]" : "text-[#f59e0b]"}`}>{`₺${fmtTL(Math.abs(yevToplamBorc - yevToplamAlacak))}`}</div>
+                        </div>
+                    </div>
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">Yevmiye Kayitlari</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5">{yevmiyeKayitlari.length} kayit</div>
+                        </div>
+                        <div className="overflow-auto" style={{ maxHeight: 400 }}>
+                            <table className="tbl-kurumsal">
+                                <thead><tr><th className="w-24 text-center">Tarih</th><th className="w-28">Fis No</th><th>Aciklama</th><th className="w-20 text-center">Hesap</th><th className="w-28 text-right">Borc</th><th className="w-28 text-right">Alacak</th><th className="w-20 text-center">Kaynak</th></tr></thead>
+                                <tbody>
+                                    {yevmiyeKayitlari.length === 0 ? (
+                                        <tr><td colSpan={7} className="p-6 text-center text-slate-400 text-xs font-bold uppercase">Yevmiye kaydi bulunamadi. Yevmiye Defteri sayfasindan senkronize edin.</td></tr>
+                                    ) : yevmiyeKayitlari.slice(0, 200).map(k => (
+                                        <tr key={k.id} className="bg-white hover:bg-slate-50">
+                                            <td className="text-center text-xs">{new Date(k.tarih).toLocaleDateString("tr-TR")}</td>
+                                            <td className="font-mono text-xs font-bold text-slate-600">{k.fis_no}</td>
+                                            <td className="text-xs text-slate-700 truncate max-w-[200px]">{k.aciklama}</td>
+                                            <td className="text-center font-mono text-xs font-bold">{k.hesap_kodu}</td>
+                                            <td className="text-right text-xs font-semibold">{Number(k.borc) > 0 ? <span className="text-[#dc2626]">{fmtTL(Number(k.borc))}</span> : ""}</td>
+                                            <td className="text-right text-xs font-semibold">{Number(k.alacak) > 0 ? <span className="text-[#059669]">{fmtTL(Number(k.alacak))}</span> : ""}</td>
+                                            <td className="text-center"><span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase" style={{ background: (KAYNAK_RENK[k.kaynak] || "#64748b") + "18", color: KAYNAK_RENK[k.kaynak] || "#64748b" }}>{k.kaynak}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {yevmiyeKayitlari.length > 0 && (
+                            <div className="px-4 py-2 bg-slate-50 flex justify-between text-xs font-bold" style={{ borderTop: "1px solid var(--c-border)" }}>
+                                <span className="text-slate-500">{yevmiyeKayitlari.length} kayit {yevmiyeKayitlari.length > 200 ? "(ilk 200 gosteriliyor)" : ""}</span>
+                                <div className="flex gap-4"><span className="text-[#dc2626]">B: {fmtTL(yevToplamBorc)}</span><span className="text-[#059669]">A: {fmtTL(yevToplamAlacak)}</span></div>
+                            </div>
+                        )}
+                    </div>
+                </>}
+
+                {/* MİZAN SEKMESİ */}
+                {sekme === "mizan" && <>
+                    {mizanSatirlari.length > 0 && (
+                        <div className={`px-4 py-2 text-xs font-bold flex items-center gap-2 ${mizDengeli ? "bg-[#f0fdf4] text-[#059669]" : "bg-[#fef2f2] text-[#dc2626]"}`} style={{ border: `1px solid ${mizDengeli ? "#bbf7d0" : "#fecaca"}` }}>
+                            <i className={`fas ${mizDengeli ? "fa-check-circle" : "fa-exclamation-triangle"}`} />
+                            {mizDengeli ? "Mizan dengede" : `Mizan dengede degil! Fark: ${fmtTL(Math.abs(mizBorc - mizAlacak))} TL`}
+                        </div>
+                    )}
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">Mizan Tablosu</div>
+                        </div>
+                        <table className="tbl-kurumsal">
+                            <thead><tr><th className="w-24 text-center">Hesap Kodu</th><th>Hesap Adi</th><th className="w-28 text-right">Toplam Borc</th><th className="w-28 text-right">Toplam Alacak</th><th className="w-28 text-right">Borc Bakiye</th><th className="w-28 text-right">Alacak Bakiye</th></tr></thead>
+                            <tbody>
+                                {mizanSatirlari.length === 0 ? (
+                                    <tr><td colSpan={6} className="p-6 text-center text-slate-400 text-xs font-bold uppercase">Yevmiye kaydi bulunamadi</td></tr>
+                                ) : <>
+                                    {mizanSatirlari.map(s => (
+                                        <tr key={s.hesap_kodu} className="bg-white hover:bg-slate-50">
+                                            <td className="text-center font-mono text-xs font-bold">{s.hesap_kodu}</td>
+                                            <td className="text-xs font-semibold text-slate-700">{s.hesap_adi}</td>
+                                            <td className="text-right text-xs font-semibold text-[#dc2626]">{s.toplamBorc > 0 ? fmtTL(s.toplamBorc) : "-"}</td>
+                                            <td className="text-right text-xs font-semibold text-[#059669]">{s.toplamAlacak > 0 ? fmtTL(s.toplamAlacak) : "-"}</td>
+                                            <td className="text-right text-xs font-bold text-[#dc2626]">{s.borcBakiye > 0 ? fmtTL(s.borcBakiye) : "-"}</td>
+                                            <td className="text-right text-xs font-bold text-[#059669]">{s.alacakBakiye > 0 ? fmtTL(s.alacakBakiye) : "-"}</td>
+                                        </tr>
+                                    ))}
+                                    <tr className="bg-slate-100 font-bold" style={{ borderTop: "2px solid var(--c-border)" }}>
+                                        <td className="text-center text-xs">-</td><td className="text-xs uppercase">Toplam</td>
+                                        <td className="text-right text-xs text-[#dc2626]">{fmtTL(mizBorc)}</td>
+                                        <td className="text-right text-xs text-[#059669]">{fmtTL(mizAlacak)}</td>
+                                        <td className="text-right text-xs text-[#dc2626]">{fmtTL(mizanSatirlari.reduce((a, s) => a + s.borcBakiye, 0))}</td>
+                                        <td className="text-right text-xs text-[#059669]">{fmtTL(mizanSatirlari.reduce((a, s) => a + s.alacakBakiye, 0))}</td>
+                                    </tr>
+                                </>}
+                            </tbody>
+                        </table>
+                    </div>
+                </>}
+
+                {/* BİLANCO SEKMESİ */}
+                {sekme === "bilanco" && <>
+                    {yevmiyeKayitlari.length > 0 && (
+                        <div className={`px-4 py-2 text-xs font-bold flex items-center gap-2 ${bilDengeli ? "bg-[#f0fdf4] text-[#059669]" : "bg-[#fef2f2] text-[#dc2626]"}`} style={{ border: `1px solid ${bilDengeli ? "#bbf7d0" : "#fecaca"}` }}>
+                            <i className={`fas ${bilDengeli ? "fa-check-circle" : "fa-exclamation-triangle"}`} />
+                            {bilDengeli ? "Bilanco dengede. Aktif = Pasif" : `Bilanco dengede degil! Fark: ${fmtTL(Math.abs(bilToplamAktif - bilToplamPasif))} TL`}
+                        </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className={`p-4 text-center ${bilToplamAktif > 0 ? "bg-[#eff6ff]" : "bg-slate-50"}`} style={{ border: "2px solid #bfdbfe" }}>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Toplam Aktif</div>
+                            <div className="text-xl font-bold text-[#1d4ed8]">{`₺${fmtTL(bilToplamAktif)}`}</div>
+                        </div>
+                        <div className={`p-4 text-center ${bilToplamPasif > 0 ? "bg-[#faf5ff]" : "bg-slate-50"}`} style={{ border: "2px solid #d8b4fe" }}>
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Toplam Pasif</div>
+                            <div className="text-xl font-bold text-[#7c3aed]">{`₺${fmtTL(bilToplamPasif)}`}</div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {/* AKTİF */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 text-xs font-bold text-white uppercase tracking-wider" style={{ background: "#1e3a5f" }}>Aktif (Varliklar)</div>
+                            <div className="px-4 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest" style={{ borderBottom: "1px solid var(--c-border)" }}>Donen Varliklar</div>
+                            {[{ l: "Kasa (100)", v: bilKasa }, { l: "Bankalar (102)", v: bilBanka }, { l: "Alicilar (120)", v: bilAlici }, { l: "Ticari Mallar (153)", v: bilTicMal }].map(r => (
+                                <div key={r.l} className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="pl-3 text-slate-600">{r.l}</span><span className="font-semibold">{fmtTL(r.v)} TL</span></div>
+                            ))}
+                            <div className="flex justify-between px-4 py-2 bg-slate-50 text-xs font-bold" style={{ borderBottom: "1px solid var(--c-border)" }}><span>TOPLAM AKTIF</span><span className="text-[#1d4ed8]">{fmtTL(bilToplamAktif)} TL</span></div>
+                        </div>
+                        {/* PASİF */}
+                        <div className="bg-white border border-slate-200">
+                            <div className="px-4 py-2.5 text-xs font-bold text-white uppercase tracking-wider" style={{ background: "#581c87" }}>Pasif (Kaynaklar)</div>
+                            <div className="px-4 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest" style={{ borderBottom: "1px solid var(--c-border)" }}>Kisa Vadeli Yukumlulukler</div>
+                            <div className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="pl-3 text-slate-600">Saticilar (320)</span><span className="font-semibold">{fmtTL(bilSatici)} TL</span></div>
+                            <div className="px-4 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest" style={{ borderBottom: "1px solid var(--c-border)" }}>Ozkaynaklar</div>
+                            <div className="flex justify-between px-4 py-2 text-xs" style={{ borderBottom: "1px solid #f1f5f9" }}><span className="pl-3 text-slate-600">Net Kar / Zarar</span><span className={`font-semibold ${bilNetKar >= 0 ? "text-[#059669]" : "text-[#dc2626]"}`}>{fmtTL(bilNetKar)} TL</span></div>
+                            <div className="flex justify-between px-4 py-2 bg-slate-50 text-xs font-bold" style={{ borderBottom: "1px solid var(--c-border)" }}><span>TOPLAM PASIF</span><span className="text-[#7c3aed]">{fmtTL(bilToplamPasif)} TL</span></div>
                         </div>
                     </div>
                 </>}

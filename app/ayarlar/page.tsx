@@ -107,7 +107,8 @@ export default function AyarlarEkrani() {
       const { error } = await supabase.from("sirketler").update(formData).eq("id", aktifSirket.id).select().single();
       if (error) { toast.error("Güncelleme sırasında hata oluştu: " + error.message); }
       else {
-          sirketGuncelle(formData);
+          const { sifre: _s, ...sirketVerisi } = formData;
+          sirketGuncelle(sirketVerisi);
           toast.success("Firma bilgileriniz başarıyla güncellendi!");
       }
       setKaydediliyor(false);

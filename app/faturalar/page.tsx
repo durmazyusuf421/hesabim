@@ -235,6 +235,70 @@ export default function FaturaMerkezi() {
     toast.success(`${secililer.length} fatura Excel olarak indirildi.`);
   };
 
+  // ŞABLON FONKSİYONLARI
+  const sablonlariGetir = async () => {
+    if (!aktifSirket) return;
+    const { data } = await supabase.from("fatura_sablonlari").select("id, sablon_adi").eq("sirket_id", aktifSirket.id).order("sablon_adi");
+    if (!data) { setSablonlar([]); return; }
+    // Her şablon için kalem sayısı ve toplam tutar hesapla
+    const detayliSablonlar = await Promise.all(data.map(async (s) => {
+      const { data: kalemler } = await supabase.from("fatura_sablon_kalemleri").select("miktar, birim_fiyat, kdv_orani").eq("sablon_id", s.id);
+      const klist = kalemler || [];
+      const toplam = klist.reduce((a, k) => a + (Number(k.miktar) * Number(k.birim_fiyat) * (1 + Number(k.kdv_orani) / 100)), 0);
+      return { ...s, kalem_sayisi: klist.length, toplam_tutar: toplam };
+    }));
+    setSablonlar(detayliSablonlar);
+  };
+
+  const sablonKaydet = async () => {
+    if (!aktifSirket || !sablonKaydetAdi.trim()) { toast.error("Sablon adi girin!"); return; }
+    if (faturaKalemleri.length === 0 || !faturaKalemleri[0].urun_adi) { toast.error("Kaydedilecek kalem yok!"); return; }
+    const { data: sablon, error } = await supabase.from("fatura_sablonlari")
+      .insert([{ sirket_id: aktifSirket.id, sablon_adi: sablonKaydetAdi.trim() }]).select().single();
+    if (error || !sablon) { toast.error("Sablon kayit hatasi: " + (error?.message || "")); return; }
+    const kalemler = faturaKalemleri.filter(k => k.urun_adi).map(k => ({
+      sablon_id: sablon.id, urun_adi: k.urun_adi, miktar: Number(k.miktar) || 1,
+      birim: k.birim, birim_fiyat: Number(k.birim_fiyat) || 0, kdv_orani: k.kdv_orani,
+    }));
+    await supabase.from("fatura_sablon_kalemleri").insert(kalemler);
+    toast.success(`"${sablonKaydetAdi}" sablonu kaydedildi.`);
+    setSablonKaydetAdi("");
+    setSablonKaydetModalAcik(false);
+    sablonlariGetir();
+  };
+
+  const sablonYukle = async (sablonId: number) => {
+    const { data: kalemler } = await supabase.from("fatura_sablon_kalemleri").select("*").eq("sablon_id", sablonId);
+    if (!kalemler || kalemler.length === 0) { toast.error("Sablonda kalem bulunamadi!"); return; }
+    const yeniKalemler: FaturaKalemi[] = kalemler.map(k => ({
+      urun_adi: k.urun_adi || "", miktar: k.miktar || 1, birim: k.birim || "Adet",
+      birim_fiyat: k.birim_fiyat || 0, kdv_orani: k.kdv_orani || 20,
+    }));
+    // Mevcut kalemleri boşsa değiştir, doluysa ekle
+    const mevcutDolu = faturaKalemleri.some(k => k.urun_adi.trim());
+    if (mevcutDolu) {
+      onayla({
+        baslik: "Sablon Yukle",
+        mesaj: "Mevcut kalemler silinsin mi, yoksa sablon eklensin mi?",
+        onayMetni: "Degistir (Sil + Yukle)",
+        tehlikeli: false,
+        onOnayla: () => { setFaturaKalemleri(yeniKalemler); toast.success("Sablon yuklendi (mevcut kalemler degistirildi)."); setSablonModalAcik(false); },
+        onReddet: () => { setFaturaKalemleri([...faturaKalemleri.filter(k => k.urun_adi.trim()), ...yeniKalemler]); toast.success("Sablon kalemleri eklendi."); setSablonModalAcik(false); },
+      });
+    } else {
+      setFaturaKalemleri(yeniKalemler);
+      toast.success("Sablon yuklendi.");
+      setSablonModalAcik(false);
+    }
+  };
+
+  const sablonSil = async (sablonId: number) => {
+    await supabase.from("fatura_sablon_kalemleri").delete().eq("sablon_id", sablonId);
+    await supabase.from("fatura_sablonlari").delete().eq("id", sablonId);
+    toast.success("Sablon silindi.");
+    sablonlariGetir();
+  };
+
   // MODAL STATELERİ
   const [modalAcik, setModalAcik] = useState(false);
   const [modalMod, setModalMod] = useState<"goruntule" | "duzenle">("duzenle");
@@ -242,6 +306,12 @@ export default function FaturaMerkezi() {
   const [faturaForm, setFaturaForm] = useState<FaturaFormState>({ fatura_no: "", tarih: new Date().toISOString().split('T')[0], cari_id: "" });
   const [faturaKalemleri, setFaturaKalemleri] = useState<FaturaKalemi[]>([]);
   const { birimler: birimListesi } = useBirimler();
+
+  // ŞABLON STATELERİ
+  const [sablonModalAcik, setSablonModalAcik] = useState(false);
+  const [sablonlar, setSablonlar] = useState<{id:number;sablon_adi:string;kalem_sayisi?:number;toplam_tutar?:number}[]>([]);
+  const [sablonKaydetAdi, setSablonKaydetAdi] = useState("");
+  const [sablonKaydetModalAcik, setSablonKaydetModalAcik] = useState(false);
 
   // SATIR İÇİ STOK ARAMA (AUTOCOMPLETE)
   const [acikAutoIndex, setAcikAutoIndex] = useState<number>(-1);
@@ -738,6 +808,7 @@ export default function FaturaMerkezi() {
                     <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => yeniFaturaBaslat('GIDEN')} className="btn-primary flex items-center gap-2"><i className="fas fa-file-export text-[10px]" /> SATIŞ FATURASI</button>
                         <button onClick={() => yeniFaturaBaslat('GELEN')} className="btn-primary flex items-center gap-2" style={{ background: "#ea580c" }}><i className="fas fa-file-import text-[10px]" /> ALIŞ FATURASI</button>
+                        <button onClick={() => { sablonlariGetir(); setSablonModalAcik(true); }} className="btn-secondary flex items-center gap-2"><i className="fas fa-copy text-[10px]" /> Sablonlar</button>
                     </div>
                     <div className="relative">
                         <input type="text" placeholder="Fatura No veya Cari..." value={aramaTerimi} onChange={(e) => setAramaTerimi(e.target.value)} className="input-kurumsal w-64" />
@@ -849,6 +920,12 @@ export default function FaturaMerkezi() {
               <div className="flex items-center space-x-2">
                  {modalMod === "goruntule" && (
                      <button onClick={() => setModalMod("duzenle")} className="btn-secondary text-xs font-bold"><i className="fas fa-edit mr-1"></i> Düzenle</button>
+                 )}
+                 {modalMod === "duzenle" && (
+                     <>
+                         <button onClick={() => { sablonlariGetir(); setSablonModalAcik(true); }} className="btn-secondary text-xs font-bold"><i className="fas fa-copy mr-1"></i> Sablon Yukle</button>
+                         <button onClick={() => setSablonKaydetModalAcik(true)} className="btn-secondary text-xs font-bold"><i className="fas fa-save mr-1"></i> Sablon Kaydet</button>
+                     </>
                  )}
                  <button onClick={faturaYazdir} className="btn-secondary text-xs font-bold"><i className="fas fa-print mr-1"></i> Yazdır</button>
                  <button onClick={() => setModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
@@ -1022,6 +1099,56 @@ export default function FaturaMerkezi() {
           </div>
         </div>
       )}
+      {/* ŞABLON LİSTESİ MODALI */}
+      {sablonModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-0 md:p-4">
+          <div className="bg-white w-full h-full md:h-auto md:max-w-md md:max-h-[80vh] flex flex-col overflow-hidden" style={{ border: "1px solid var(--c-border)" }}>
+            <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+              <h3 className="text-sm font-semibold text-slate-800 flex items-center"><i className="fas fa-copy mr-2 text-[#1d4ed8]"></i>Fatura Sablonlari</h3>
+              <button onClick={() => setSablonModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 space-y-2">
+              {sablonlar.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Kayitli sablon yok</div>
+              ) : sablonlar.map(s => (
+                <div key={s.id} className="bg-white p-3 flex items-center justify-between" style={{ border: "1px solid var(--c-border)" }}>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">{s.sablon_adi}</div>
+                    <div className="text-[10px] text-slate-400">{s.kalem_sayisi || 0} kalem &middot; {(s.toplam_tutar || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => sablonYukle(s.id)} className="px-2.5 py-1.5 text-[10px] font-bold text-white bg-[#1d4ed8] hover:bg-blue-700 transition-colors"><i className="fas fa-download mr-1"></i>Yukle</button>
+                    <button onClick={() => sablonSil(s.id)} className="w-7 h-7 bg-red-50 text-[#dc2626] border border-red-200 hover:bg-red-100 flex items-center justify-center transition-colors"><i className="fas fa-trash text-[9px]"></i></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ŞABLON KAYDET MODALI */}
+      {sablonKaydetModalAcik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-0 md:p-4">
+          <div className="bg-white w-full md:max-w-sm flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
+            <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+              <h3 className="text-sm font-semibold text-slate-800 flex items-center"><i className="fas fa-save mr-2 text-[#059669]"></i>Sablon Kaydet</h3>
+              <button onClick={() => setSablonKaydetModalAcik(false)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Sablon Adi</label>
+                <input type="text" value={sablonKaydetAdi} onChange={e => setSablonKaydetAdi(e.target.value)} placeholder="Ornek: Aylik kira faturasi..." className="input-kurumsal w-full" onKeyDown={e => e.key === "Enter" && sablonKaydet()} autoFocus />
+              </div>
+              <div className="text-[10px] text-slate-400">{faturaKalemleri.filter(k => k.urun_adi).length} kalem kaydedilecek</div>
+              <button onClick={sablonKaydet} className="btn-primary w-full py-2.5 font-semibold text-xs uppercase tracking-widest" style={{ background: "#059669" }}>
+                <i className="fas fa-save mr-2"></i> Kaydet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <OnayModal />
     </>
   );

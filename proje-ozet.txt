@@ -1,0 +1,235 @@
+==============================================================
+  MUHASEBE-PRO - PROJE OZET DOKUMANI
+  Tarih: 2026-04-08
+  Versiyon: v2.9.19+
+==============================================================
+
+1. SAYFA LİSTESİ (30 sayfa)
+==============================================================
+
+ANA SAYFALAR:
+  /login                    - Giris / Kayit ekrani
+  /                         - Siparisler (Fis) - Ana sayfa
+  /dashboard                - Genel Bakis (Yonetici dashboard)
+  /pos                      - Hizli Satis (POS) - Toptan
+  /ayarlar                  - Sistem Ayarlari (Firma + Personel)
+
+FINANS:
+  /tahsilat                 - Tahsilat / Odeme
+  /banka                    - Banka Hesaplari
+  /cek-senet                - Cek / Senet Takibi
+  /faturalar                - Faturalar (Alis/Satis + Sablon sistemi)
+  /masraflar                - Masraf/Gider Takibi
+
+DEPO:
+  /stok                     - Stok Kartlari
+  /stok/sayim               - Stok Sayimi
+  /stok/toplu-fiyat         - Toplu Fiyat Guncelleme
+  /stok-hareketleri         - Stok Hareketleri
+
+MUHASEBE:
+  /cari                     - Cari Kartlari (Musteri/Tedarikci)
+  /ekstre                   - Cari Hareketler (Hesap Ekstresi)
+  /yevmiye                  - Yevmiye Defteri
+  /gelir-tablosu            - Gelir Tablosu
+  /mizan                    - Mizan
+  /bilanco                  - Bilanco
+  /raporlar                 - Raporlar (9 sekme: Genel, Kar/Zarar, Masraf, KDV, Plasiyer, Gelir Tablosu, Yevmiye, Mizan, Bilanco)
+
+SATIS:
+  /kampanyalar              - Kampanyalar
+
+PORTAL (PERAKENDE):
+  /portal                   - Toptan Siparis
+  /portal/pos               - Hizli Satis (POS) - Perakende
+  /portal/siparisler        - Siparislerim
+  /portal/toptancilar       - Toptancilarim
+  /portal/kasa              - Kasa & Nakit Akisi
+  /portal/veresiye          - Veresiye Defteri
+  /portal/ekstre            - Hesap Ekstresi
+  /portal/raporlar          - Raporlarim (7 sekme: Genel, Kar/Zarar, Masraf, KDV, Yevmiye, Mizan, Bilanco)
+
+
+2. SUPABASE TABLOLARI (41 tablo)
+==============================================================
+
+KULLANICI & SIRKET:
+  sirketler                 - Ana sirket/isletme kayitlari
+  alt_kullanicilar          - Personel/alt kullanici kayitlari
+  firmalar                  - Cari kartlar (musteri/tedarikci)
+
+SIPARIS & SATIS:
+  siparisler                - Toptan siparisler
+  siparis_kalemleri         - Siparis detay kalemleri
+  siparis_sablonlari        - Siparis sablonlari
+  siparis_sablon_kalemleri  - Siparis sablon kalemleri
+  perakende_satislar        - Perakende POS satislari
+  perakende_satis_kalemleri - Perakende satis kalemleri
+  kampanyalar               - Kampanya/indirim tanimlari
+
+FATURA:
+  faturalar                 - Alis/Satis faturalari
+  fatura_detaylari          - Fatura kalem detaylari
+  fatura_sablonlari         - Fatura sablonlari
+  fatura_sablon_kalemleri   - Fatura sablon kalemleri
+
+STOK:
+  urunler                   - Urun/stok kartlari
+  urun_kategorileri         - Urun kategorileri
+  stok_hareketleri          - Stok giris/cikis hareketleri
+  stok_sayimlari            - Stok sayim kayitlari
+  stok_sayim_kalemleri      - Sayim detay kalemleri
+  lot_seri_hareketleri      - Lot/seri numarasi takibi
+  depolar                   - Depo tanimlari
+  depo_stok                 - Depo bazli stok miktarlari
+  birimler                  - Olcu birimleri
+
+FINANS:
+  cari_hareketler           - Cari hesap hareketleri
+  banka_hesaplari           - Banka hesap tanimlari
+  banka_hareketleri         - Banka hesap hareketleri
+  cek_senetler              - Cek/senet kayitlari
+  kasa_hareketleri          - Kasa hareketleri (toptanci)
+  kasa_islemleri            - Kasa islemleri (perakende)
+  masraflar                 - Masraf/gider kayitlari
+  masraf_kategorileri       - Masraf kategorileri
+  ozel_fiyatlar             - Musteri ozel fiyatlari
+  doviz_kurlari             - Doviz kuru kayitlari
+
+MUHASEBE:
+  yevmiye_kayitlari         - Yevmiye defteri kayitlari
+
+VERESIYE:
+  veresiye_musteriler       - Veresiye musteri kartlari
+  veresiye_hareketler       - Veresiye hesap hareketleri
+
+B2B:
+  b2b_baglantilar           - Toptanci-perakende baglantilari
+
+DIGER:
+  bildirimler               - Bildirim kayitlari
+  musteri_ziyaretleri       - Plasiyer ziyaret kayitlari
+  satis_hedefleri           - Aylik satis hedefleri
+
+
+3. SON EKLENEN OZELLIKLER (v2.9.15 - v2.9.19+)
+==============================================================
+
+v2.9.19+ (Commit edilmemis - Guncel):
+  - Yevmiye Defteri sayfasi (/yevmiye)
+    * Otomatik senkronizasyon: Fatura, tahsilat, masraf, kasa, banka → yevmiye
+    * Cift kayit (borc/alacak) sistemi
+    * Hesap plani: 100 Kasa, 102 Bankalar, 120 Alicilar, 153 Ticari Mallar,
+      320 Saticilar, 391 Hesaplanan KDV, 600 Yurt Ici Satislar, 770 Genel Yonetim Giderleri
+  - Gelir Tablosu sayfasi (/gelir-tablosu)
+    * Brut Satislar → Net Satislar → Brut Kar → Faaliyet Kari → Net Kar/Zarar
+    * Donem filtresi, Excel/PDF export
+  - Mizan sayfasi (/mizan)
+    * Hesap bazli borc/alacak toplami ve bakiye
+    * Denge kontrolu
+  - Bilanco sayfasi (/bilanco)
+    * Aktif (Varliklar) / Pasif (Kaynaklar) iki sutunlu gorunum
+    * Denge kontrolu: Aktif = Pasif
+  - Fatura Sablon sistemi
+    * Sablon kaydet/yukle/sil
+    * Mevcut kalemleri degistir veya ekle secenegi
+  - Raporlar sayfasina 3 yeni sekme: Yevmiye, Mizan, Bilanco
+  - Portal Raporlarina 4 yeni sekme: Masraf, Yevmiye, Mizan, Bilanco
+  - Sol menu sadelestirmesi (muhasebe sayfalari Raporlar altina tasindi)
+
+v2.9.19:
+  - Masraf/Gider takip sistemi (/masraflar)
+    * Kategori yonetimi (10 varsayilan kategori)
+    * KDV hesaplama, odeme turu, belge no
+    * Excel/PDF export
+  - Dashboard'a "Bu Ay Masraf" karti
+  - Raporlara Masraf Raporu sekmesi (pie chart + trend)
+  - Raporlara Gelir vs Gider karsilastirmasi
+
+v2.9.18:
+  - Fatura toplu islem (checkbox, toplu sil/PDF/Excel)
+  - PDF Turkce karakter duzeltmesi (trFix fonksiyonu)
+  - Firma adi duzeltmesi (aktifSirket.isletme_adi)
+  - useAuth sirketGuncelle fonksiyonu (localStorage + event senkronizasyonu)
+
+v2.9.17:
+  - Kampanya POS entegrasyonu duzeltme
+
+v2.9.16:
+  - useEffect sonsuz dongu duzeltmesi (24 dosya)
+
+v2.9.15:
+  - Tahsilat mobil sadelestirme, tutar input gorunurluk
+
+
+4. EKSIK KALAN OZELLIKLER
+==============================================================
+
+MUHASEBE:
+  - Satis iadesi sistemi (brut satislardan dusme)
+  - Satis iskontosu sistemi
+  - Duran varliklar (binalar, araclar vb.)
+  - Amortisman hesaplama
+  - KDV beyannamesi otomatik olusturma
+  - e-Fatura / e-Arsiv entegrasyonu
+
+FINANS:
+  - Otomatik banka mutabakati
+  - Vade takibi ve hatirlatma
+  - Taksitli odeme takibi
+  - Pos cihazi entegrasyonu
+
+STOK:
+  - Barkod okuyucu ile stok sayim
+  - Minimum stok uyarisi (bildirim)
+  - Stok transfer (depolar arasi)
+
+RAPORLAR:
+  - Maliyet analizi raporu
+  - Musteri segmentasyon raporu
+  - Stok devir hizi raporu
+  - Karlilik analizi (urun bazli)
+
+GENEL:
+  - Coklu dil destegi
+  - Dark mode
+  - PWA (Progressive Web App) - offline calisma
+  - Veri yedekleme / geri yukleme
+  - Kullanici aktivite loglari
+  - Rol bazli sayfa erisim kontrolu (middleware)
+
+
+5. BILINEN HATALAR / SORUNLAR
+==============================================================
+
+  - Yevmiye senkronizasyonu: cari_hareketler tablosunda sirket_id
+    filtresi yok (tum sirketlerin hareketlerini cekiyor)
+  - Bilanco dengesi: Kasa girisi karsi hesap olarak 391 (Hesaplanan KDV)
+    kullaniliyor, bu muhasebesel olarak yanlis olabilir
+  - Fatura toplu PDF: Cok sayida fatura secildiginde (50+) tarayici
+    yavaslamasi yasanabilir
+  - Portal raporlarinda masraf verisi: perakende_satislar tablosundan
+    alis faturasi verisi cekilemiyor (sadece satis var)
+  - Gelir tablosu: Satis iadesi ve iskonto su an 0 olarak sabit,
+    henuz iade/iskonto modulu yok
+  - Mizan/Bilanco: Yevmiye kayitlari senkronize edilmemisse
+    bos gorunuyor, kullaniciya uyari gosteriliyor ama yonlendirme yok
+
+
+==============================================================
+  TEKNIK BILGILER
+==============================================================
+
+Framework:      Next.js 14+ (App Router)
+UI:             Tailwind CSS + Ozel CSS degiskenleri
+State:          React useState/useMemo (hook bazli, global state yok)
+Auth:           Supabase Auth + localStorage senkronizasyonu
+Database:       Supabase (PostgreSQL)
+RLS:            get_my_sirket_id() fonksiyonu ile satir bazli guvenlik
+Charts:         Recharts
+PDF:            jsPDF
+Excel:          xlsx (SheetJS)
+Portal:         Cift portal: TOPTANCI (/) ve PERAKENDE (/portal)
+Deployment:     Vercel (tahmini)
+
+==============================================================
