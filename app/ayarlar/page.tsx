@@ -24,7 +24,7 @@ interface PersonelFormState {
 export default function AyarlarEkrani() {
   const toast = useToast();
   const { onayla, OnayModal } = useOnayModal();
-  const { aktifSirket, kullaniciRol, isYonetici } = useAuth();
+  const { aktifSirket, kullaniciRol, isYonetici, sirketGuncelle } = useAuth();
 
   const [yukleniyor, setYukleniyor] = useState(true);
   const [kaydediliyor, setKaydediliyor] = useState(false);
@@ -107,6 +107,7 @@ export default function AyarlarEkrani() {
       const { error } = await supabase.from("sirketler").update(formData).eq("id", aktifSirket.id).select().single();
       if (error) { toast.error("Güncelleme sırasında hata oluştu: " + error.message); }
       else {
+          sirketGuncelle(formData);
           toast.success("Firma bilgileriniz başarıyla güncellendi!");
       }
       setKaydediliyor(false);

@@ -1,10 +1,12 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { supabase, faturaNoUret } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
 import { useOnayModal } from "@/app/lib/useOnayModal";
 import { useBirimler } from "@/app/lib/useBirimler";
+import jsPDF from "jspdf";
+import * as XLSX from "xlsx";
 interface FaturaKalemi { urun_adi: string; miktar: string | number; birim: string; birim_fiyat: string | number; kdv_orani: number; }
 interface StokUrun { id: number; urun_adi: string; birim: string; satis_fiyati: number; kdv_orani: number; }
 interface FaturaFormState { fatura_no: string; tarih: string; cari_id: string; }
@@ -39,6 +41,199 @@ export default function FaturaMerkezi() {
   const [aramaTerimi, setAramaTerimi] = useState("");
   const [yukleniyor, setYukleniyor] = useState(true);
   const [seciliFaturaId, setSeciliFaturaId] = useState<number | null>(null);
+
+  // TOPLU İŞLEM
+  const [seciliIdler, setSeciliIdler] = useState<Set<number>>(new Set());
+
+  const topluSecimToggle = useCallback((id: number) => {
+    setSeciliIdler(prev => {
+      const yeni = new Set(prev);
+      if (yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  }, []);
+
+  const tumunuSec = useCallback((liste: FaturaRecord[]) => {
+    setSeciliIdler(prev => {
+      if (prev.size === liste.length && liste.every(f => prev.has(f.id))) return new Set();
+      return new Set(liste.map(f => f.id));
+    });
+  }, []);
+
+  const secimiKaldir = useCallback(() => setSeciliIdler(new Set()), []);
+
+  // TOPLU SİL
+  const topluSil = () => {
+    if (seciliIdler.size === 0) return;
+    onayla({
+      baslik: "Toplu Fatura Sil",
+      mesaj: `${seciliIdler.size} fatura silinecek, emin misiniz?`,
+      altMesaj: "Cari bakiye işlemi manuel düzeltilmelidir.",
+      onayMetni: "Evet, Sil",
+      tehlikeli: true,
+      onOnayla: async () => {
+        const idArr = Array.from(seciliIdler);
+        for (const id of idArr) {
+          await supabase.from("fatura_detaylari").delete().eq("fatura_id", id);
+          await supabase.from("faturalar").delete().eq("id", id);
+        }
+        toast.success(`${idArr.length} fatura silindi.`);
+        setSeciliIdler(new Set());
+        setSeciliFaturaId(null);
+        if (aktifSirket) verileriGetir(aktifSirket.id);
+      }
+    });
+  };
+
+  // TÜRKÇE KARAKTER FIX (jsPDF helvetica desteklemiyor)
+  const trFix = (text: string) => (text || '')
+    .replace(/İ/g, 'I').replace(/ı/g, 'i')
+    .replace(/Ğ/g, 'G').replace(/ğ/g, 'g')
+    .replace(/Ş/g, 'S').replace(/ş/g, 's')
+    .replace(/Ü/g, 'U').replace(/ü/g, 'u')
+    .replace(/Ö/g, 'O').replace(/ö/g, 'o')
+    .replace(/Ç/g, 'C').replace(/ç/g, 'c');
+
+  // TOPLU PDF
+  const topluPdfIndir = async () => {
+    if (seciliIdler.size === 0) return;
+    const secililer = faturalar.filter(f => seciliIdler.has(f.id));
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sirket = aktifSirket;
+    const firmaAdi = trFix(sirket?.isletme_adi || sirket?.unvan || "Firma Adi");
+
+    for (let fi = 0; fi < secililer.length; fi++) {
+      const f = secililer[fi];
+      if (fi > 0) doc.addPage();
+
+      const cariAdi = trFix(f.cari_adi || firmalar.find(fr => fr.id === f.cari_id)?.unvan || "-");
+      const tarihStr = new Date(f.tarih).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+      // Kalem verilerini çek
+      const { data: kalemData } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", f.id);
+      const kalemler = kalemData || [];
+
+      let y = 15;
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text(firmaAdi, 15, y);
+
+      doc.setFontSize(20);
+      doc.text("FATURA", 195, y, { align: "right" });
+      y += 10;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(trFix(`Fatura No: ${f.fatura_no}`), 195, y, { align: "right" });
+      y += 5;
+      doc.text(trFix(`Tarih: ${tarihStr}`), 195, y, { align: "right" });
+      y += 5;
+      doc.text(trFix(`Tip: ${f.tip === "GIDEN" ? "Satis Faturasi" : "Alis Faturasi"}`), 195, y, { align: "right" });
+      y += 10;
+
+      doc.setFont("helvetica", "bold");
+      doc.text(trFix(`Sayin: ${cariAdi}`), 15, y);
+      y += 10;
+
+      // Tablo başlığı
+      doc.setFillColor(30, 58, 95);
+      doc.rect(15, y, 180, 8, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(8);
+      doc.text("#", 18, y + 5.5);
+      doc.text(trFix("Urun / Hizmet"), 25, y + 5.5);
+      doc.text("Miktar", 100, y + 5.5, { align: "center" });
+      doc.text("Birim", 118, y + 5.5, { align: "center" });
+      doc.text(trFix("Birim Fiyat"), 145, y + 5.5, { align: "right" });
+      doc.text("KDV%", 160, y + 5.5, { align: "center" });
+      doc.text("Tutar", 192, y + 5.5, { align: "right" });
+      y += 8;
+
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      kalemler.forEach((k: Record<string, unknown>, i: number) => {
+        const bg = i % 2 === 0 ? 255 : 248;
+        doc.setFillColor(bg, bg, bg);
+        doc.rect(15, y, 180, 7, "F");
+        doc.setFontSize(8);
+        doc.text(String(i + 1), 18, y + 5);
+        doc.text(trFix(String(k.urun_adi || "")), 25, y + 5);
+        doc.text(String(k.miktar || ""), 100, y + 5, { align: "center" });
+        doc.text(trFix(String(k.birim || "")), 118, y + 5, { align: "center" });
+        doc.text(fmt(Number(k.birim_fiyat || 0)), 145, y + 5, { align: "right" });
+        doc.text(`%${k.kdv_orani || 0}`, 160, y + 5, { align: "center" });
+        doc.text(fmt(Number(k.satir_toplami || 0)), 192, y + 5, { align: "right" });
+        y += 7;
+      });
+
+      y += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(trFix(`Ara Toplam: ${fmt(Number(f.ara_toplam || 0))} TL`), 192, y, { align: "right" }); y += 5;
+      doc.text(trFix(`KDV Toplam: ${fmt(Number(f.kdv_toplam || 0))} TL`), 192, y, { align: "right" }); y += 5;
+      doc.setFontSize(11);
+      doc.text(trFix(`GENEL TOPLAM: ${fmt(Number(f.genel_toplam || 0))} TL`), 192, y, { align: "right" });
+    }
+
+    doc.save(`faturalar_toplu_${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success(`${secililer.length} fatura PDF olarak indirildi.`);
+  };
+
+  // TOPLU EXCEL
+  const topluExcelIndir = async () => {
+    if (seciliIdler.size === 0) return;
+    const secililer = faturalar.filter(f => seciliIdler.has(f.id));
+
+    const satirlar: Record<string, unknown>[] = [];
+    for (const f of secililer) {
+      const cariAdi = f.cari_adi || firmalar.find(fr => fr.id === f.cari_id)?.unvan || "-";
+      const { data: kalemData } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", f.id);
+      const kalemler = kalemData || [];
+
+      if (kalemler.length === 0) {
+        satirlar.push({
+          "Fatura No": f.fatura_no,
+          "Tarih": new Date(f.tarih).toLocaleDateString("tr-TR"),
+          "Tip": f.tip === "GIDEN" ? "SATIS" : "ALIS",
+          "Cari": cariAdi,
+          "Urun Adi": "-",
+          "Miktar": 0,
+          "Birim": "-",
+          "Birim Fiyat": 0,
+          "KDV %": 0,
+          "Satir Toplami": 0,
+          "Ara Toplam": Number(f.ara_toplam || 0),
+          "KDV Toplam": Number(f.kdv_toplam || 0),
+          "Genel Toplam": Number(f.genel_toplam || 0),
+        });
+      } else {
+        kalemler.forEach((k: Record<string, unknown>) => {
+          satirlar.push({
+            "Fatura No": f.fatura_no,
+            "Tarih": new Date(f.tarih).toLocaleDateString("tr-TR"),
+            "Tip": f.tip === "GIDEN" ? "SATIS" : "ALIS",
+            "Cari": cariAdi,
+            "Urun Adi": k.urun_adi,
+            "Miktar": k.miktar,
+            "Birim": k.birim,
+            "Birim Fiyat": k.birim_fiyat,
+            "KDV %": k.kdv_orani,
+            "Satir Toplami": k.satir_toplami,
+            "Ara Toplam": Number(f.ara_toplam || 0),
+            "KDV Toplam": Number(f.kdv_toplam || 0),
+            "Genel Toplam": Number(f.genel_toplam || 0),
+          });
+        });
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(satirlar);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Faturalar");
+    XLSX.writeFile(wb, `faturalar_toplu_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success(`${secililer.length} fatura Excel olarak indirildi.`);
+  };
 
   // MODAL STATELERİ
   const [modalAcik, setModalAcik] = useState(false);
@@ -550,11 +745,25 @@ export default function FaturaMerkezi() {
                     </div>
                 </div>
 
+                {/* TOPLU İŞLEM BARI */}
+                {seciliIdler.size > 0 && (
+                  <div className="flex items-center justify-between px-4 py-2 shrink-0 flex-wrap gap-2" style={{ background: "#eff6ff", borderBottom: "1px solid #bfdbfe" }}>
+                    <span className="text-xs font-bold text-blue-800"><i className="fas fa-check-square mr-1"></i> {seciliIdler.size} fatura secildi</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={topluSil} className="px-3 py-1.5 text-[11px] font-bold text-white bg-red-600 hover:bg-red-700 flex items-center gap-1 transition-colors"><i className="fas fa-trash text-[10px]"></i> Toplu Sil</button>
+                      <button onClick={topluPdfIndir} className="px-3 py-1.5 text-[11px] font-bold text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-1 transition-colors"><i className="fas fa-file-pdf text-[10px]"></i> Toplu PDF Indir</button>
+                      <button onClick={topluExcelIndir} className="px-3 py-1.5 text-[11px] font-bold text-white bg-green-600 hover:bg-green-700 flex items-center gap-1 transition-colors"><i className="fas fa-file-excel text-[10px]"></i> Toplu Excel Indir</button>
+                      <button onClick={secimiKaldir} className="px-3 py-1.5 text-[11px] font-bold text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 flex items-center gap-1 transition-colors"><i className="fas fa-times text-[10px]"></i> Secimi Kaldir</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex-1 overflow-auto relative print:hidden" style={{ background: "var(--c-bg)" }}>
                     {/* MASAÜSTÜ TABLO */}
                     <table className="tbl-kurumsal hidden md:table">
                         <thead>
                             <tr>
+                                <th className="w-10 text-center"><input type="checkbox" checked={filtrelenmisFaturalar.length > 0 && filtrelenmisFaturalar.every(f => seciliIdler.has(f.id))} onChange={() => tumunuSec(filtrelenmisFaturalar)} className="cursor-pointer accent-blue-600 w-4 h-4" /></th>
                                 <th className="w-32 text-center">Tarih</th>
                                 <th className="w-32">Fatura No</th>
                                 <th className="w-24 text-center">Yön</th>
@@ -565,14 +774,15 @@ export default function FaturaMerkezi() {
                         </thead>
                         <tbody>
                             {yukleniyor ? (
-                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
+                                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Yükleniyor...</td></tr>
                             ) : filtrelenmisFaturalar.length === 0 ? (
-                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
+                                <tr><td colSpan={7} className="p-8 text-center text-slate-400 font-bold uppercase tracking-widest">Fatura Bulunamadı</td></tr>
                             ) : (
                             filtrelenmisFaturalar.map((f) => {
                                 const isGiden = f.tip === "GIDEN";
                                 return (
-                                    <tr key={f.id} onDoubleClick={() => faturaModalAc("goruntule", f.id)} className="bg-white hover:bg-slate-50">
+                                    <tr key={f.id} onDoubleClick={() => faturaModalAc("goruntule", f.id)} className={`hover:bg-slate-50 ${seciliIdler.has(f.id) ? 'bg-blue-50' : 'bg-white'}`}>
+                                        <td className="text-center"><input type="checkbox" checked={seciliIdler.has(f.id)} onChange={() => topluSecimToggle(f.id)} onClick={(e) => e.stopPropagation()} className="cursor-pointer accent-blue-600 w-4 h-4" /></td>
                                         <td className="text-center">{new Date(f.tarih).toLocaleDateString('tr-TR')}</td>
                                         <td className="font-bold">{f.fatura_no}</td>
                                         <td className={`text-center font-semibold ${isGiden ? 'text-[#1d4ed8]' : 'text-orange-500'}`}>{isGiden ? 'SATIŞ' : 'ALIŞ'}</td>
@@ -602,7 +812,8 @@ export default function FaturaMerkezi() {
                         filtrelenmisFaturalar.map((f) => {
                             const isGiden = f.tip === "GIDEN";
                             return (
-                                <div key={f.id} onClick={() => faturaModalAc("goruntule", f.id)} className="bg-white p-3 flex items-center justify-between gap-3" style={{ border: "1px solid var(--c-border)" }}>
+                                <div key={f.id} onClick={() => faturaModalAc("goruntule", f.id)} className={`p-3 flex items-center justify-between gap-3 ${seciliIdler.has(f.id) ? 'bg-blue-50' : 'bg-white'}`} style={{ border: "1px solid var(--c-border)" }}>
+                                    <input type="checkbox" checked={seciliIdler.has(f.id)} onChange={() => topluSecimToggle(f.id)} onClick={(e) => e.stopPropagation()} className="cursor-pointer accent-blue-600 w-4 h-4 shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="font-bold text-sm text-slate-800 truncate">{f.fatura_no}</span>

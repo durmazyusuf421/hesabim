@@ -38,6 +38,7 @@ interface AuthState {
   isDepocu: boolean;
   isMuhasebe: boolean;
   cikisYap: () => Promise<void>;
+  sirketGuncelle: (guncelVeri: Partial<AktifSirket>) => void;
 }
 
 // localStorage'dan oku
@@ -212,6 +213,35 @@ export function useAuth(): AuthState {
     };
   }, [aktifSirket, cikisYap]);
 
+  // Güncel instance kimliği — kendi dispatch ettiği event'i yok sayması için
+  const instanceRef = useRef(Math.random().toString(36).slice(2));
+
+  const sirketGuncelle = useCallback((guncelVeri: Partial<AktifSirket>) => {
+    setAktifSirket(prev => {
+      if (!prev) return prev;
+      const yeni = { ...prev, ...guncelVeri };
+      localStorage.setItem("aktifSirket", JSON.stringify(yeni));
+      window.dispatchEvent(new CustomEvent("sirketGuncellendi", { detail: instanceRef.current }));
+      return yeni;
+    });
+  }, []);
+
+  // Diğer useAuth instance'larından gelen güncellemeyi dinle
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent;
+      if (ce.detail === instanceRef.current) return;
+      const ls = localStorageOku();
+      if (ls) {
+        setTimeout(() => {
+          setAktifSirket(ls.sirket);
+        }, 0);
+      }
+    };
+    window.addEventListener("sirketGuncellendi", handler);
+    return () => window.removeEventListener("sirketGuncellendi", handler);
+  }, []);
+
   return {
     aktifSirket,
     kullanici,
@@ -222,5 +252,6 @@ export function useAuth(): AuthState {
     isDepocu: kullaniciRol.includes("DEPOCU") || isYonetici,
     isMuhasebe: kullaniciRol.includes("MUHASEBE") || isYonetici,
     cikisYap,
+    sirketGuncelle,
   };
 }
