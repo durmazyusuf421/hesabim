@@ -80,6 +80,9 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     const [toptanciNotu, setToptanciNotu] = useState("");
     const [onayGonderiliyor, setOnayGonderiliyor] = useState(false);
 
+    const sirketId = aktifSirket?.id;
+    const sirketRol = aktifSirket?.rol;
+
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);
         try {
@@ -119,26 +122,26 @@ const [seciliSiparisId, setSeciliSiparisId] = useState<number | null>(null);
     }
 
     useEffect(() => {
-        if (!aktifSirket) return;
-        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
+        if (!sirketId) return;
+        if (sirketRol !== "TOPTANCI") { window.location.href = "/login"; return; }
 
         if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("PLASIYER") || kullaniciRol.includes("DEPOCU")) {
-            verileriGetir(aktifSirket.id);
+            verileriGetir(sirketId);
         } else {
             setYukleniyor(false);
         }
-    }, [aktifSirket, kullaniciRol]);
+    }, [sirketId, sirketRol, kullaniciRol]);
 
     // Özel fiyatları çek
     useEffect(() => {
-        if (!aktifSirket || !seciliCariId) { setOzelFiyatMap({}); return; }
-        supabase.from("ozel_fiyatlar").select("urun_id, ozel_fiyat").eq("sirket_id", aktifSirket.id).eq("firma_id", Number(seciliCariId)).eq("aktif", true)
+        if (!sirketId || !seciliCariId) { setOzelFiyatMap({}); return; }
+        supabase.from("ozel_fiyatlar").select("urun_id, ozel_fiyat").eq("sirket_id", sirketId).eq("firma_id", Number(seciliCariId)).eq("aktif", true)
             .then(({ data }) => {
                 const map: Record<number, number> = {};
                 (data || []).forEach(of => { map[of.urun_id] = Number(of.ozel_fiyat); });
                 setOzelFiyatMap(map);
             });
-    }, [aktifSirket, seciliCariId]);
+    }, [sirketId, seciliCariId]);
 
     // --- YENİ SİPARİŞ FONKSİYONLARI ---
     const yeniSiparisAc = () => {

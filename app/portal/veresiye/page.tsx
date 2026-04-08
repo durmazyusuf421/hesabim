@@ -56,6 +56,9 @@ export default function VeresiyeDefteri() {
   const [detayKalemler, setDetayKalemler] = useState<{ urun_adi: string; miktar: number; birim_fiyat: number; toplam_tutar: number }[]>([]);
   const [detayYukleniyor, setDetayYukleniyor] = useState(false);
 
+  const musteriId = aktifMusteri?.id;
+  const kullaniciId = kullanici?.id;
+
   const hareketDetayAc = async (h: VeresiyeHareket) => {
       setDetayHareket(h);
       setDetayKalemler([]);
@@ -111,12 +114,12 @@ export default function VeresiyeDefteri() {
   }
 
   useEffect(() => {
-    if (!aktifMusteri) return;
+    if (!musteriId) return;
     if (aktifMusteri.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
 
     setKullaniciAdi(kullanici?.ad_soyad || "Yönetici");
-    verileriGetir(aktifMusteri.id);
-  }, [aktifMusteri, kullanici]);
+    verileriGetir(musteriId);
+  }, [musteriId, kullaniciId]);
 
   const yeniMusteri = () => { setSeciliMusteriId(null); setMusteriForm({ ad_soyad: "", telefon: "", adres: "" }); setModalAcik(true); };
 

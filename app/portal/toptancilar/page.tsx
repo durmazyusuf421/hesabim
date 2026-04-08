@@ -28,11 +28,13 @@ export default function ToptancilarimSayfasi() {
     const [baglantilar, setBaglantilar] = useState<Baglanti[]>([]);
     const [yukleniyor, setYukleniyor] = useState(true);
 
+    const sirketId = aktifSirket?.id;
+
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         if (aktifSirket.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
         verileriGetir();
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     async function verileriGetir() {
         if (!aktifSirket) return;

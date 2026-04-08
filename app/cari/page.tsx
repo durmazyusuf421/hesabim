@@ -92,10 +92,12 @@ export default function CariKartlarSayfasi() {
     const [zFormNot, setZFormNot] = useState("");
     const [zFormSonuc, setZFormSonuc] = useState("BILGI_VERILDI");
 
+    const sirketId = aktifSirket?.id;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        verileriGetir(aktifSirket.id);
-        b2bIstekleriGetir(aktifSirket.id);
+        if (!sirketId) return;
+        verileriGetir(sirketId);
+        b2bIstekleriGetir(sirketId);
 
         // URL'den sekme parametresini oku
         const params = new URLSearchParams(window.location.search);
@@ -103,7 +105,7 @@ export default function CariKartlarSayfasi() {
             setSayfaSekme("istekler");
             window.history.replaceState({}, "", "/cari");
         }
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);

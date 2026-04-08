@@ -74,10 +74,12 @@ export default function MusteriPortali() {
   const [ozelFiyatMap, setOzelFiyatMap] = useState<Record<string, number>>({});
   const [dovizKurlari, setDovizKurlari] = useState<Record<string, number>>({});
 
+  const musteriId = aktifMusteri?.id;
+
   useEffect(() => {
-    if (!aktifMusteri) return;
+    if (!musteriId) return;
     if (aktifMusteri.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
-  }, [aktifMusteri]);
+  }, [musteriId]);
 
   const verileriGetir = async () => {
     if (!aktifMusteri) return;
@@ -122,7 +124,7 @@ export default function MusteriPortali() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { verileriGetir(); }, [aktifMusteri]);
+  useEffect(() => { verileriGetir(); }, [musteriId]);
 
   const detayAcKapat = async (toptanciId: number) => {
       if (acikDetayId === toptanciId) { setAcikDetayId(null); return; }

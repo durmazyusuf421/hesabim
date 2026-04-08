@@ -54,11 +54,14 @@ export default function PortalRaporlar() {
     const [kdvSatisKalemleri, setKdvSatisKalemleri] = useState<SatisKalemRaw[]>([]);
     const [kdvYukleniyor, setKdvYukleniyor] = useState(false);
 
+    const sirketId = aktifSirket?.id;
+    const sirketRol = aktifSirket?.rol;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        if (aktifSirket.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
+        if (!sirketId) return;
+        if (sirketRol !== "PERAKENDE") { window.location.href = "/login"; return; }
         verileriGetir();
-    }, [aktifSirket, donem, ozelBas, ozelBit]);
+    }, [sirketId, donem, ozelBas, ozelBit]);
 
     async function verileriGetir() {
         if (!aktifSirket) return;
@@ -103,10 +106,10 @@ export default function PortalRaporlar() {
 
     // KDV VERİLERİNİ ÇEK
     useEffect(() => {
-        if (!aktifSirket || sekme !== "kdv") return;
+        if (!sirketId || sekme !== "kdv") return;
         async function kdvVerileriGetir() {
             setKdvYukleniyor(true);
-            const sid = aktifSirket!.id;
+            const sid = sirketId;
             const ayBas = `${kdvAy}-01`;
             const ayBitD = new Date(Number(kdvAy.split("-")[0]), Number(kdvAy.split("-")[1]), 0);
             const ayBit = ayBitD.toISOString().split("T")[0];
@@ -119,7 +122,7 @@ export default function PortalRaporlar() {
             setKdvYukleniyor(false);
         }
         kdvVerileriGetir();
-    }, [aktifSirket, sekme, kdvAy]);
+    }, [sirketId, sekme, kdvAy]);
 
     // KDV HESAPLAMALARI
     const KDV_ORANLARI = [1, 10, 20];

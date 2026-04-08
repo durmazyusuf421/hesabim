@@ -36,15 +36,19 @@ export default function PosEkrani() {
 
   const barkodInputRef = useRef<HTMLInputElement>(null);
 
+  const sirketId = aktifSirket?.id;
+  const sirketRol = aktifSirket?.rol;
+  const kullaniciAdiSoyad = kullanici?.ad_soyad;
+
   useEffect(() => {
-    if (!aktifSirket) return;
-    if (aktifSirket.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
-    setKullaniciAdi(kullanici?.ad_soyad || "Kasiyer");
-    verileriGetir(aktifSirket.id);
+    if (!sirketId) return;
+    if (sirketRol !== "PERAKENDE") { window.location.href = "/login"; return; }
+    setKullaniciAdi(kullaniciAdiSoyad || "Kasiyer");
+    verileriGetir(sirketId);
     barkodInputRef.current?.focus();
     // Parkları localStorage'dan yükle
     try { const p = localStorage.getItem("pos_parklar"); if (p) setParklar(JSON.parse(p)); } catch { /* */ }
-  }, [aktifSirket, kullanici]);
+  }, [sirketId, sirketRol, kullaniciAdiSoyad]);
 
   const parklariKaydet = (yeniParklar: ParkItem[]) => { setParklar(yeniParklar); localStorage.setItem("pos_parklar", JSON.stringify(yeniParklar)); };
 

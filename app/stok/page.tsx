@@ -87,13 +87,16 @@ export default function StokKartlari() {
       urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
   });
 
-  async function verileriGetir(sirketId: number) {
+  const sirketId = aktifSirket?.id;
+  const sirketRol = aktifSirket?.rol;
+
+  async function verileriGetir(sId: number) {
       setYukleniyor(true);
       const [{ data, error }, { data: katData }, { data: kurData }, { data: depoData }, { data: dsData }] = await Promise.all([
-          supabase.from("urunler").select("*").eq("sahip_sirket_id", sirketId).order('id', { ascending: false }),
-          supabase.from("urun_kategorileri").select("*").eq("sirket_id", sirketId).eq("aktif", true).order("kategori_adi"),
+          supabase.from("urunler").select("*").eq("sahip_sirket_id", sId).order('id', { ascending: false }),
+          supabase.from("urun_kategorileri").select("*").eq("sirket_id", sId).eq("aktif", true).order("kategori_adi"),
           supabase.from("doviz_kurlari").select("doviz_turu, kur").order("tarih", { ascending: false }).limit(10),
-          supabase.from("depolar").select("*").eq("sirket_id", sirketId).eq("aktif", true).order("depo_adi"),
+          supabase.from("depolar").select("*").eq("sirket_id", sId).eq("aktif", true).order("depo_adi"),
           supabase.from("depo_stok").select("depo_id, urun_id, miktar"),
       ]);
       if (!error && data) setUrunler(data);
@@ -107,14 +110,14 @@ export default function StokKartlari() {
   }
 
   useEffect(() => {
-    if (!aktifSirket) return;
+    if (!sirketId) return;
 
-    if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("DEPOCU") || aktifSirket.rol === "PERAKENDE") {
-        verileriGetir(aktifSirket.id);
+    if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("DEPOCU") || sirketRol === "PERAKENDE") {
+        verileriGetir(sirketId);
     } else {
         setYukleniyor(false);
     }
-  }, [aktifSirket, kullaniciRol]);
+  }, [sirketId, sirketRol, kullaniciRol]);
 
   const hasAccess = aktifSirket?.rol === "PERAKENDE" || isDepocu;
 
@@ -411,6 +414,7 @@ export default function StokKartlari() {
                 <div className="flex items-center justify-between px-4 py-2 shrink-0 flex-wrap gap-2" style={{ borderBottom: "1px solid var(--c-border)" }}>
                     <div className="flex items-center gap-2">
                         <button onClick={yeniUrunEkle} className="btn-primary flex items-center gap-2"><i className="fas fa-plus text-[10px]" /> YENİ ÜRÜN</button>
+                        <Link href="/stok-hareketleri" className="btn-secondary flex items-center gap-2"><i className="fas fa-dolly-flatbed text-[10px]" /> STOK HAREKETLERİ</Link>
                         <Link href="/stok/toplu-fiyat" className="btn-secondary flex items-center gap-2"><i className="fas fa-tags text-[10px]" /> TOPLU FİYAT</Link>
                         <Link href="/stok/sayim" className="btn-secondary flex items-center gap-2"><i className="fas fa-clipboard-check text-[10px]" /> STOK SAYIMI</Link>
                         <button onClick={() => { setKatFormAdi(""); setKatFormRenk("#3B82F6"); setKatDuzenleId(null); setKategoriModalAcik(true); }} className="btn-secondary flex items-center gap-2"><i className="fas fa-folder text-[10px]" /> KATEGORİLER</button>

@@ -55,9 +55,11 @@ export default function AyarlarEkrani() {
   });
 
 
-  async function verileriGetir(sirketId: number) {
+  const sirketId = aktifSirket?.id;
+
+  async function verileriGetir(sId: number) {
       setYukleniyor(true);
-      const { data } = await supabase.from("sirketler").select("*").eq("id", sirketId).single();
+      const { data } = await supabase.from("sirketler").select("*").eq("id", sId).single();
       if (data) {
           setFormData({
               isletme_adi: data.isletme_adi || "", unvan: data.unvan || "", vergi_dairesi: data.vergi_dairesi || "", vergi_no: data.vergi_no || "",
@@ -67,23 +69,23 @@ export default function AyarlarEkrani() {
       setYukleniyor(false);
   }
 
-  async function personelleriGetir(sirketId: number) {
-      const { data } = await supabase.from("alt_kullanicilar").select("*").eq("sirket_id", sirketId).order('id', { ascending: false });
+  async function personelleriGetir(sId: number) {
+      const { data } = await supabase.from("alt_kullanicilar").select("*").eq("sirket_id", sId).order('id', { ascending: false });
       setPersoneller(data || []);
   }
 
 
   useEffect(() => {
-    if (!aktifSirket) return;
+    if (!sirketId) return;
 
     // Eğer Yönetici ise verileri çek
     if (kullaniciRol.includes("YONETICI")) {
-        verileriGetir(aktifSirket.id);
-        personelleriGetir(aktifSirket.id);
+        verileriGetir(sirketId);
+        personelleriGetir(sirketId);
         // Ana Depo otomatik oluştur
-        supabase.from("depolar").select("id").eq("sirket_id", aktifSirket.id).limit(1).then(async ({ data }) => {
+        supabase.from("depolar").select("id").eq("sirket_id", sirketId).limit(1).then(async ({ data }) => {
             if (!data || data.length === 0) {
-                await supabase.from("depolar").insert({ sirket_id: aktifSirket!.id, depo_adi: "Ana Depo" });
+                await supabase.from("depolar").insert({ sirket_id: sirketId, depo_adi: "Ana Depo" });
             }
         });
         // Döviz kurlarını çek
@@ -97,7 +99,7 @@ export default function AyarlarEkrani() {
     } else {
         setYukleniyor(false);
     }
-  }, [aktifSirket, kullaniciRol]);
+  }, [sirketId, kullaniciRol]);
 
   const ayarlariKaydet = async () => {
       if(!aktifSirket) return;

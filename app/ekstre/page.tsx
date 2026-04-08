@@ -37,13 +37,15 @@ export default function CariEkstre() {
     setFirmalar(data || []);
   }
 
+  const sirketId = aktifSirket?.id;
+
   useEffect(() => {
-    if (!aktifSirket) return;
+    if (!sirketId) return;
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("MUHASEBE")) {
-        firmalariGetir(aktifSirket.id);
+        firmalariGetir(sirketId);
     }
-  }, [aktifSirket, kullaniciRol]);
+  }, [sirketId, kullaniciRol]);
 
   useEffect(() => {
       async function hareketleriCek() {

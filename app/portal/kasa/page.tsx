@@ -41,6 +41,9 @@ export default function MarketKasasi() {
       tarih: new Date().toISOString().split('T')[0]
   });
 
+  const musteriId = aktifMusteri?.id;
+  const kullaniciAdiAuth = kullanici?.ad_soyad;
+
   async function verileriGetir(sirketId: number) {
       setYukleniyor(true);
       const { data } = await supabase.from("kasa_islemleri").select("*").eq("sirket_id", sirketId).order('tarih', { ascending: false }).order('id', { ascending: false });
@@ -72,12 +75,12 @@ export default function MarketKasasi() {
   }
 
   useEffect(() => {
-    if (!aktifMusteri) return;
-    if (aktifMusteri.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
+    if (!musteriId) return;
+    if (aktifMusteri?.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
 
-    setKullaniciAdi(kullanici?.ad_soyad || "Yönetici");
-    verileriGetir(aktifMusteri.id);
-  }, [aktifMusteri, kullanici]);
+    setKullaniciAdi(kullaniciAdiAuth || "Yönetici");
+    verileriGetir(musteriId);
+  }, [musteriId, kullaniciAdiAuth]);
 
   const yeniIslemAc = (tip: "GELIR" | "GIDER") => {
       setIslemTipi(tip);

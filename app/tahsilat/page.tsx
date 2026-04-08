@@ -62,10 +62,13 @@ export default function TahsilatErpSayfasi() {
         { id: Date.now(), cinsi: "Nakit", adi: "KASA", tutar: "", aciklama: "" }
     ]);
 
+    const sirketId = aktifSirket?.id;
+    const sirketRol = aktifSirket?.rol;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
-        verileriGetir(aktifSirket.id);
+        if (!sirketId) return;
+        if (sirketRol !== "TOPTANCI") { window.location.href = "/login"; return; }
+        verileriGetir(sirketId);
 
         // Iyzico callback sonrası URL parametrelerini kontrol et
         const params = new URLSearchParams(window.location.search);
@@ -76,7 +79,7 @@ export default function TahsilatErpSayfasi() {
             else toast.error(iyzicoMsg);
             window.history.replaceState({}, "", "/tahsilat");
         }
-    }, [aktifSirket]);
+    }, [sirketId, sirketRol]);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);

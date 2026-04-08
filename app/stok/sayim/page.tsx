@@ -52,19 +52,20 @@ export default function StokSayimSayfasi() {
     const [kalemArama, setKalemArama] = useState("");
 
     const hasAccess = isYonetici || isDepocu || aktifSirket?.rol === "PERAKENDE";
+    const sirketId = aktifSirket?.id;
 
     const verileriGetir = useCallback(async () => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         setYukleniyor(true);
-        const { data } = await supabase.from("stok_sayimlari").select("*").eq("sirket_id", aktifSirket.id).order("created_at", { ascending: false });
+        const { data } = await supabase.from("stok_sayimlari").select("*").eq("sirket_id", sirketId).order("created_at", { ascending: false });
         setSayimlar(data || []);
         setYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         verileriGetir();
-    }, [aktifSirket, verileriGetir]);
+    }, [sirketId, verileriGetir]);
 
     // Özet
     const devamEdenSayisi = useMemo(() => sayimlar.filter(s => s.durum === "DEVAM").length, [sayimlar]);

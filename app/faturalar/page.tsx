@@ -55,26 +55,28 @@ export default function FaturaMerkezi() {
   const autoWrapperRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const urunAdiInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
-  async function verileriGetir(sirketId: number) {
+  const sirketId = aktifSirket?.id;
+
+  async function verileriGetir(sId: number) {
       setYukleniyor(true);
-      const { data: fData } = await supabase.from("firmalar").select("*").eq("sahip_sirket_id", sirketId).order('unvan');
+      const { data: fData } = await supabase.from("firmalar").select("*").eq("sahip_sirket_id", sId).order('unvan');
       setFirmalar(fData || []);
 
-      const { data: faturaData } = await supabase.from("faturalar").select("*").eq("sirket_id", sirketId).order('id', { ascending: false });
+      const { data: faturaData } = await supabase.from("faturalar").select("*").eq("sirket_id", sId).order('id', { ascending: false });
       setFaturalar(faturaData || []);
 
       setYukleniyor(false);
   }
 
   useEffect(() => {
-    if (!aktifSirket) return;
+    if (!sirketId) return;
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("MUHASEBE")) {
-        verileriGetir(aktifSirket.id);
+        verileriGetir(sirketId);
     } else {
         setYukleniyor(false);
     }
-  }, [aktifSirket, kullaniciRol]);
+  }, [sirketId, kullaniciRol]);
 
   // YENİ FATURA OLUŞTURMA BAŞLATICI
   const yeniFaturaBaslat = async (tip: "GELEN" | "GIDEN") => {

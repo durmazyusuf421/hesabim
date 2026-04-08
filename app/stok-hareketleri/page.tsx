@@ -38,16 +38,19 @@ export default function StokHareketleri() {
       setYukleniyor(false);
   }
 
+  const sirketId = aktifSirket?.id;
+  const kullaniciAdi = kullanici?.ad_soyad;
+
   useEffect(() => {
-    if (!aktifSirket) return;
-    setAktifKullaniciAdi(kullanici?.ad_soyad || "Bilinmeyen Kullanıcı");
+    if (!sirketId) return;
+    setAktifKullaniciAdi(kullaniciAdi || "Bilinmeyen Kullanıcı");
 
     if (kullaniciRol.includes("YONETICI") || kullaniciRol.includes("DEPOCU")) {
-        verileriGetir(aktifSirket.id);
+        verileriGetir(sirketId);
     } else {
         setYukleniyor(false);
     }
-  }, [aktifSirket, kullanici, kullaniciRol]);
+  }, [sirketId, kullaniciAdi, kullaniciRol]);
 
   const yeniIslemBaslat = () => {
       setIslemForm({ urun_id: "", islem_tipi: "GIRIS", miktar: 1, aciklama: "", depo_id: "", lot_no: "", seri_no: "", uretim_tarihi: "", son_kullanma_tarihi: "", tedarikci: "" });

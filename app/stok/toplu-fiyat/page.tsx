@@ -23,10 +23,12 @@ export default function TopluFiyatGuncelleme() {
     const [yukleniyor, setYukleniyor] = useState(true);
     const [kaydediliyor, setKaydediliyor] = useState(false);
 
+    const sirketId = aktifSirket?.id;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        verileriGetir(aktifSirket.id);
-    }, [aktifSirket]);
+        if (!sirketId) return;
+        verileriGetir(sirketId);
+    }, [sirketId]);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);

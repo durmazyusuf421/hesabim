@@ -30,10 +30,12 @@ export default function MusteriEkstre() {
   const [seciliCariHesapId, setSeciliCariHesapId] = useState<string>("");
   const [hareketler, setHareketler] = useState<CariHareket[]>([]);
 
+  const musteriId = aktifMusteri?.id;
+
   useEffect(() => {
-    if (!aktifMusteri) return;
+    if (!musteriId) return;
     if (aktifMusteri.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
-  }, [aktifMusteri]);
+  }, [musteriId]);
 
   async function bakiyeleriGetir() {
       if (!aktifMusteri) return;
@@ -50,7 +52,7 @@ export default function MusteriEkstre() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (aktifMusteri) bakiyeleriGetir(); }, [aktifMusteri]);
+  useEffect(() => { if (musteriId) bakiyeleriGetir(); }, [musteriId]);
 
   useEffect(() => {
       async function hareketleriGetir() {

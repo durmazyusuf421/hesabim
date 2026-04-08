@@ -80,46 +80,48 @@ export default function BankaHesaplariSayfasi() {
     const [kayitYukleniyor, setKayitYukleniyor] = useState(false);
 
     const yetkili = isYonetici || isMuhasebe;
+    const sirketId = aktifSirket?.id;
+    const seciliHesapId = seciliHesap?.id;
 
     const hesaplariGetir = useCallback(async () => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         setYukleniyor(true);
         const { data, error } = await supabase
             .from("banka_hesaplari")
             .select("*")
-            .eq("sirket_id", aktifSirket.id)
+            .eq("sirket_id", sirketId)
             .order("aktif", { ascending: false })
             .order("banka_adi", { ascending: true });
         if (error) { toast.error("Hesaplar yüklenemedi"); }
         else { setHesaplar(data || []); }
         setYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     const hareketleriGetir = useCallback(async (hesapId: number) => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         setHareketYukleniyor(true);
         const { data, error } = await supabase
             .from("banka_hareketleri")
             .select("*")
             .eq("hesap_id", hesapId)
-            .eq("sirket_id", aktifSirket.id)
+            .eq("sirket_id", sirketId)
             .order("tarih", { ascending: false })
             .order("created_at", { ascending: false })
             .limit(100);
         if (error) { toast.error("Hareketler yüklenemedi"); }
         else { setHareketler(data || []); }
         setHareketYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         hesaplariGetir();
-    }, [aktifSirket, hesaplariGetir]);
+    }, [sirketId, hesaplariGetir]);
 
     useEffect(() => {
-        if (seciliHesap) hareketleriGetir(seciliHesap.id);
+        if (seciliHesapId) hareketleriGetir(seciliHesapId);
         else setHareketler([]);
-    }, [seciliHesap, hareketleriGetir]);
+    }, [seciliHesapId, hareketleriGetir]);
 
     const hesapModalAc = (hesap?: BankaHesabi) => {
         if (hesap) {

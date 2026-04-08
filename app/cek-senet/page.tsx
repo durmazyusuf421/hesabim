@@ -69,22 +69,24 @@ export default function CekSenetSayfasi() {
 
     const yetkili = isYonetici || isMuhasebe;
 
+    const sirketId = aktifSirket?.id;
+
     const verileriGetir = useCallback(async () => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         setYukleniyor(true);
         const [{ data: cekData }, { data: firmaData }] = await Promise.all([
-            supabase.from("cek_senetler").select("*").eq("sirket_id", aktifSirket.id).order("vade_tarihi", { ascending: true }),
-            supabase.from("firmalar").select("id, unvan").eq("sahip_sirket_id", aktifSirket.id).order("unvan"),
+            supabase.from("cek_senetler").select("*").eq("sirket_id", sirketId).order("vade_tarihi", { ascending: true }),
+            supabase.from("firmalar").select("id, unvan").eq("sahip_sirket_id", sirketId).order("unvan"),
         ]);
         setKayitlar(cekData || []);
         setFirmalar(firmaData || []);
         setYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         verileriGetir();
-    }, [aktifSirket, verileriGetir]);
+    }, [sirketId, verileriGetir]);
 
     // Özet hesaplamalar
     const bugun = new Date().toISOString().split("T")[0];

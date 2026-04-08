@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/useAuth";
 import { useToast } from "@/app/lib/toast";
@@ -33,12 +33,15 @@ export default function PosEkrani() {
 
     const aramaRef = useRef<HTMLInputElement>(null);
 
+    const sirketId = aktifSirket?.id;
+    const sirketRol = aktifSirket?.rol;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
-        verileriGetir(aktifSirket.id);
+        if (!sirketId) return;
+        if (sirketRol !== "TOPTANCI") { window.location.href = "/login"; return; }
+        verileriGetir(sirketId);
         if (aramaRef.current && window.innerWidth > 768) aramaRef.current.focus();
-    }, [aktifSirket]);
+    }, [sirketId, sirketRol]);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);
@@ -105,12 +108,12 @@ export default function PosEkrani() {
     // Kampanya indirimi
     const [aktifKampanyalar, setAktifKampanyalar] = useState<{id:number;kampanya_adi:string;indirim_tipi:string;indirim_degeri:number;min_siparis_tutari:number}[]>([]);
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         const bugun = new Date().toISOString().split("T")[0];
-        supabase.from("kampanyalar").select("id,kampanya_adi,indirim_tipi,indirim_degeri,min_siparis_tutari").eq("sirket_id", aktifSirket.id).eq("aktif", true).lte("baslangic_tarihi", bugun).gte("bitis_tarihi", bugun).then(({ data }) => setAktifKampanyalar(data || []));
-    }, [aktifSirket]);
+        supabase.from("kampanyalar").select("id,kampanya_adi,indirim_tipi,indirim_degeri,min_siparis_tutari").eq("sirket_id", sirketId).eq("aktif", true).lte("baslangic_tarihi", bugun).gte("bitis_tarihi", bugun).then(({ data }) => setAktifKampanyalar(data || []));
+    }, [sirketId]);
 
-    const kampanyaHesapla = () => {
+    const kampanyaIndirimSonuc = useMemo(() => {
         const toplam = araToplam + kdvToplam;
         let enIyiIndirim = 0;
         let enIyiKampanya = "";
@@ -120,8 +123,7 @@ export default function PosEkrani() {
             if (indirim > enIyiIndirim) { enIyiIndirim = indirim; enIyiKampanya = k.kampanya_adi; }
         });
         return { indirim: enIyiIndirim, kampanyaAdi: enIyiKampanya };
-    };
-    const kampanyaIndirimSonuc = kampanyaHesapla();
+    }, [araToplam, kdvToplam, aktifKampanyalar]);
     const genelToplam = Math.max(araToplam + kdvToplam - kampanyaIndirimSonuc.indirim, 0);
 
     const satisiTamamla = async (odemeTipi: 'NAKİT' | 'KREDİ KARTI' | 'VERESİYE') => {

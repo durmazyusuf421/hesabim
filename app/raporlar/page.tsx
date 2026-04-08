@@ -70,11 +70,13 @@ export default function RaporlarSayfasi() {
     const [plasiyerZiyaretler, setPlasiyerZiyaretler] = useState<{personel_adi:string;id:number}[]>([]);
     const [plasiyerYukleniyor, setPlasiyerYukleniyor] = useState(false);
 
+    const sirketId = aktifSirket?.id;
+
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         if (!hasAccess) { setYukleniyor(false); return; }
         verileriGetir();
-    }, [aktifSirket, kullaniciRol, donem, ozelBaslangic, ozelBitis]);
+    }, [sirketId, kullaniciRol, donem, ozelBaslangic, ozelBitis]);
 
     async function verileriGetir() {
         if (!aktifSirket) return;
@@ -115,10 +117,9 @@ export default function RaporlarSayfasi() {
 
     // KDV VERİLERİNİ ÇEK
     useEffect(() => {
-        if (!aktifSirket || sekme !== "kdv") return;
+        if (!sirketId || sekme !== "kdv") return;
         async function kdvVerileriGetir() {
             setKdvYukleniyor(true);
-            const sirketId = aktifSirket!.id;
             const ayBas = `${kdvAy}-01`;
             const ayBitD = new Date(Number(kdvAy.split("-")[0]), Number(kdvAy.split("-")[1]), 0);
             const ayBit = ayBitD.toISOString().split("T")[0];
@@ -139,7 +140,7 @@ export default function RaporlarSayfasi() {
             setKdvYukleniyor(false);
         }
         kdvVerileriGetir();
-    }, [aktifSirket, sekme, kdvAy]);
+    }, [sirketId, sekme, kdvAy]);
 
     // KDV HESAPLAMALARI
     const KDV_ORANLARI = [1, 10, 20];
@@ -178,10 +179,9 @@ export default function RaporlarSayfasi() {
 
     // PLASİYER VERİLERİNİ ÇEK
     useEffect(() => {
-        if (!aktifSirket || sekme !== "plasiyer") return;
+        if (!sirketId || sekme !== "plasiyer") return;
         async function plasiyerVerileriGetir() {
             setPlasiyerYukleniyor(true);
-            const sirketId = aktifSirket!.id;
             const { baslangic, bitis } = donemTarih(donem, ozelBaslangic, ozelBitis);
             const [{ data: sipData }, { data: ziyData }] = await Promise.all([
                 supabase.from("siparisler").select("id, plasiyer_id, plasiyer_adi, toplam_tutar, alici_firma_id, created_at").eq("satici_sirket_id", sirketId).not("plasiyer_id", "is", null).gte("created_at", baslangic).lte("created_at", bitis + "T23:59:59"),
@@ -192,7 +192,7 @@ export default function RaporlarSayfasi() {
             setPlasiyerYukleniyor(false);
         }
         plasiyerVerileriGetir();
-    }, [aktifSirket, sekme, donem, ozelBaslangic, ozelBitis]);
+    }, [sirketId, sekme, donem, ozelBaslangic, ozelBitis]);
 
     // PLASİYER HESAPLAMALARI
     const plasiyerRapor = useMemo(() => {

@@ -65,10 +65,12 @@ export default function MusteriSiparisleri() {
   const [redSebebi, setRedSebebi] = useState("");
   const [redIslem, setRedIslem] = useState(false);
 
+  const musteriId = aktifMusteri?.id;
+
   useEffect(() => {
-    if (!aktifMusteri) return;
+    if (!musteriId) return;
     if (aktifMusteri.rol !== "PERAKENDE") { window.location.href = "/login"; return; }
-  }, [aktifMusteri]);
+  }, [musteriId]);
 
   async function verileriGetir() {
       if (!aktifMusteri) return;
@@ -85,7 +87,7 @@ export default function MusteriSiparisleri() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (aktifMusteri) verileriGetir(); }, [aktifMusteri]);
+  useEffect(() => { if (musteriId) verileriGetir(); }, [musteriId]);
 
   const incele = async () => {
       if (!seciliSiparisId) { toast.error("Lutfen listeden bir siparis secin!"); return; }

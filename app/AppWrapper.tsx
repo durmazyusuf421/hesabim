@@ -25,8 +25,6 @@ const TOPTANCI_MENU: MenuItem[] = [
     { href: "/cek-senet", label: "Çek / Senet", icon: "fa-money-check", yetkiler: ["YONETICI", "MUHASEBE"] },
     { href: "/faturalar", label: "Faturalar", icon: "fa-file-invoice", yetkiler: ["YONETICI", "MUHASEBE"] },
     { href: "/stok", label: "Stok Kartları", icon: "fa-box", section: "DEPO", yetkiler: ["YONETICI", "DEPOCU"] },
-    { href: "/stok-hareketleri", label: "Stok Hareketleri", icon: "fa-dolly-flatbed", yetkiler: ["YONETICI", "DEPOCU"] },
-    { href: "/stok/sayim", label: "Stok Sayımı", icon: "fa-clipboard-check", yetkiler: ["YONETICI", "DEPOCU"] },
     { href: "/cari", label: "Cari Kartları", icon: "fa-users", section: "MUHASEBE", yetkiler: ["YONETICI", "PLASIYER", "MUHASEBE"] },
     { href: "/ekstre", label: "Cari Hareketler", icon: "fa-clipboard-list", yetkiler: ["YONETICI", "MUHASEBE"] },
     { href: "/raporlar", label: "Raporlar", icon: "fa-chart-bar", yetkiler: ["YONETICI", "MUHASEBE"] },
@@ -39,8 +37,6 @@ const MUSTERI_MENU: MenuItem[] = [
     { href: "/portal/siparisler", label: "Siparişlerim", icon: "fa-list-alt" },
     { href: "/portal/toptancilar", label: "Toptancılarım", icon: "fa-handshake" },
     { href: "/stok", label: "Stok Kartları", icon: "fa-box", section: "DEPO" },
-    { href: "/stok-hareketleri", label: "Stok Hareketleri", icon: "fa-dolly-flatbed" },
-    { href: "/stok/sayim", label: "Stok Sayımı", icon: "fa-clipboard-check" },
     { href: "/portal/kasa", label: "Kasa & Nakit Akışı", icon: "fa-cash-register", section: "FİNANS" },
     { href: "/banka", label: "Banka Hesapları", icon: "fa-university" },
     { href: "/cek-senet", label: "Çek / Senet", icon: "fa-money-check" },
@@ -115,7 +111,9 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
         return () => { clearTimeout(timer); window.removeEventListener('openMobilMenu', handleMenuOpen); window.removeEventListener("keydown", handleKeyDown); };
     }, []);
 
-    useEffect(() => { if (aktifSirket) setAuthTimeout(false); }, [aktifSirket]);
+    const sirketId = aktifSirket?.id;
+
+    useEffect(() => { if (sirketId) setAuthTimeout(false); }, [sirketId]);
 
     // Global arama - modal açılınca input'a focus
     useEffect(() => {
@@ -123,9 +121,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     }, [aramaAcik]);
 
     const globalAramaYap = useCallback(async (sorgu: string) => {
-        if (!aktifSirket || sorgu.length < 2) { setAramaSonuclar([]); setAramaYukleniyor(false); return; }
+        if (!sirketId || sorgu.length < 2) { setAramaSonuclar([]); setAramaYukleniyor(false); return; }
         setAramaYukleniyor(true);
-        const sirketId = aktifSirket.id;
         const sonuclar: AramaSonuc[] = [];
         try {
             const [urunRes, musteriRes, siparisRes, faturaRes] = await Promise.all([
@@ -141,7 +138,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
         } catch { /* */ }
         setAramaSonuclar(sonuclar);
         setAramaYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     const aramaGirdiDegisti = (val: string) => {
         setAramaSorgu(val);
@@ -156,7 +153,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
     // Günlük otomatik döviz kuru güncelleme
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         if (localStorage.getItem("doviz_otomatik_guncelleme") === "false") return;
         const LS_KEY = "_dovizSonGuncelleme";
         const bugun = new Date().toISOString().split("T")[0];
@@ -171,41 +168,41 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
                 if (data.USD > 0 || data.EUR > 0) localStorage.setItem(LS_KEY, bugun);
             } catch { /* sessizce devam */ }
         })();
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         async function b2bSayisiniGetir() {
-            const { count } = await supabase.from("b2b_baglantilar").select("id", { count: "exact", head: true }).eq("toptanci_id", aktifSirket!.id).eq("durum", "BEKLIYOR");
+            const { count } = await supabase.from("b2b_baglantilar").select("id", { count: "exact", head: true }).eq("toptanci_id", sirketId).eq("durum", "BEKLIYOR");
             setBekleyenB2B(count || 0);
         }
         b2bSayisiniGetir();
         const interval = setInterval(b2bSayisiniGetir, 30000);
         return () => clearInterval(interval);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     // Bildirimleri çek ve periyodik kontrol
     const bildirimGetir = async () => {
-        if (!aktifSirket) return;
-        const { data } = await supabase.from("bildirimler").select("*").eq("sirket_id", aktifSirket.id).order("created_at", { ascending: false }).limit(50);
+        if (!sirketId) return;
+        const { data } = await supabase.from("bildirimler").select("*").eq("sirket_id", sirketId).order("created_at", { ascending: false }).limit(50);
         setBildirimler(data || []);
     };
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         bildirimGetir();
         const interval = setInterval(bildirimGetir, 60000);
         return () => clearInterval(interval);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     // Otomatik bildirim oluşturma (günde bir kez)
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         const LS_KEY = "_bildirimOtoKontrol";
         const bugun = new Date().toISOString().split("T")[0];
         if (localStorage.getItem(LS_KEY) === bugun) return;
         (async () => {
-            const sid = aktifSirket.id;
+            const sid = sirketId;
             // Kritik stok kontrolü
             const { data: stokData } = await supabase.from("urunler").select("urun_adi, stok_miktari, min_stok_miktari").eq("sahip_sirket_id", sid).eq("aktif", true).gt("min_stok_miktari", 0);
             const kritikler = (stokData || []).filter(u => Number(u.stok_miktari) <= Number(u.min_stok_miktari));
@@ -222,7 +219,7 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
             localStorage.setItem(LS_KEY, bugun);
             bildirimGetir();
         })();
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     const okunmamisSayisi = bildirimler.filter(b => !b.okundu).length;
 
@@ -258,8 +255,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
     useEffect(() => {
         if (isLoginPage) return;
-        if (authTimeout && !aktifSirket && !authYukleniyor) { window.location.href = "/login"; }
-    }, [authTimeout, aktifSirket, authYukleniyor, isLoginPage]);
+        if (authTimeout && !sirketId && !authYukleniyor) { window.location.href = "/login"; }
+    }, [authTimeout, sirketId, authYukleniyor, isLoginPage]);
 
     const menuYetkiliMi = (item: MenuItem): boolean => {
         if (!item.yetkiler || item.yetkiler.length === 0) return true;

@@ -47,19 +47,21 @@ export default function KampanyalarSayfasi() {
     const [formUygulamaAlani, setFormUygulamaAlani] = useState("TUMU");
     const [formAktif, setFormAktif] = useState(true);
 
+    const sirketId = aktifSirket?.id;
+
     const verileriGetir = useCallback(async () => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         setYukleniyor(true);
-        const { data, error } = await supabase.from("kampanyalar").select("*").eq("sirket_id", aktifSirket.id).order("created_at", { ascending: false });
+        const { data, error } = await supabase.from("kampanyalar").select("*").eq("sirket_id", sirketId).order("created_at", { ascending: false });
         if (error) toast.error("Kampanyalar yüklenemedi");
         else setKampanyalar(data || []);
         setYukleniyor(false);
-    }, [aktifSirket]);
+    }, [sirketId]);
 
     useEffect(() => {
-        if (!aktifSirket) return;
+        if (!sirketId) return;
         verileriGetir();
-    }, [aktifSirket, verileriGetir]);
+    }, [sirketId, verileriGetir]);
 
     const bugun = new Date().toISOString().split("T")[0];
     const aktifSayisi = useMemo(() => kampanyalar.filter(k => k.aktif && k.bitis_tarihi >= bugun).length, [kampanyalar, bugun]);

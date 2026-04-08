@@ -54,14 +54,16 @@ export default function AnaSayfa() {
     const [hFormMusteri, setHFormMusteri] = useState("");
     const [hedefKaydediliyor, setHedefKaydediliyor] = useState(false);
 
+    const sirketId = aktifSirket?.id;
+    const sirketRol = aktifSirket?.rol;
+
     useEffect(() => {
-        if (!aktifSirket) return;
-        if (aktifSirket.rol !== "TOPTANCI") { window.location.href = "/login"; return; }
+        if (!sirketId) return;
+        if (sirketRol !== "TOPTANCI") { window.location.href = "/login"; return; }
         if (!kullaniciRol.includes("YONETICI")) { setYukleniyor(false); return; }
         async function verileriTopla() {
             setYukleniyor(true);
             try {
-                const sirketId = aktifSirket!.id;
                 const { data: fData } = await supabase.from("firmalar").select("id, unvan").eq("sahip_sirket_id", sirketId);
                 const map: Record<number, string> = {};
                 if (fData) fData.forEach(f => { map[f.id] = f.unvan; });
@@ -156,7 +158,7 @@ export default function AnaSayfa() {
             setYukleniyor(false);
         }
         verileriTopla();
-    }, [aktifSirket, kullaniciRol]);
+    }, [sirketId, sirketRol, kullaniciRol]);
 
     const bugun = new Date().toISOString().split("T")[0];
     const bugunkuSiparisler = useMemo(() => siparisler.filter(s => s.created_at?.startsWith(bugun)), [siparisler, bugun]);
