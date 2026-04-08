@@ -165,9 +165,30 @@ export default function PosEkrani() {
       });
   };
 
-  const genelToplam = useMemo(() => {
+  const sepetToplami = useMemo(() => {
       return sepet.reduce((sum, item) => sum + (item.miktar * item.fiyat), 0);
   }, [sepet]);
+
+  // KAMPANYA SİSTEMİ
+  const [aktifKampanyalar, setAktifKampanyalar] = useState<{id:number;kampanya_adi:string;indirim_tipi:string;indirim_degeri:number;min_siparis_tutari:number}[]>([]);
+  useEffect(() => {
+      if (!sirketId) return;
+      const bugun = new Date().toISOString().split("T")[0];
+      supabase.from("kampanyalar").select("id,kampanya_adi,indirim_tipi,indirim_degeri,min_siparis_tutari").eq("sirket_id", sirketId).eq("aktif", true).lte("baslangic_tarihi", bugun).gte("bitis_tarihi", bugun).then(({ data }) => setAktifKampanyalar(data || []));
+  }, [sirketId]);
+
+  const kampanyaSonuc = useMemo(() => {
+      let enIyiIndirim = 0;
+      let enIyiKampanya = "";
+      aktifKampanyalar.forEach(k => {
+          if (sepetToplami < (Number(k.min_siparis_tutari) || 0)) return;
+          const indirim = k.indirim_tipi === "YUZDE" ? sepetToplami * (k.indirim_degeri / 100) : Number(k.indirim_degeri);
+          if (indirim > enIyiIndirim) { enIyiIndirim = indirim; enIyiKampanya = k.kampanya_adi; }
+      });
+      return { indirim: enIyiIndirim, kampanyaAdi: enIyiKampanya };
+  }, [sepetToplami, aktifKampanyalar]);
+
+  const genelToplam = Math.max(sepetToplami - kampanyaSonuc.indirim, 0);
 
   // NUMPAD İŞLEMLERİ
   const numpadTikla = (tus: string) => {
@@ -296,13 +317,21 @@ export default function PosEkrani() {
               {/* DEV GENEL TOPLAM ALANI */}
               <div className="bg-slate-900 text-white p-4 md:p-6 shrink-0 relative overflow-hidden sticky bottom-0 z-10">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl"></div>
-                  <div className="flex justify-between items-end relative z-10">
-                      <div>
-                          <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ödenecek Tutar</p>
-                          <p className="text-slate-500 font-semibold text-sm">Toplam {sepet.reduce((sum, item) => sum + item.miktar, 0)} Ürün</p>
-                      </div>
-                      <div className="text-3xl md:text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
-                          {genelToplam.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-2xl text-emerald-600 align-super">TL</span>
+                  <div className="relative z-10">
+                      {kampanyaSonuc.indirim > 0 && (
+                          <div className="flex justify-between items-center pb-2 mb-2 border-b border-dashed border-slate-700">
+                              <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider"><i className="fas fa-tags mr-1"></i>{kampanyaSonuc.kampanyaAdi}</span>
+                              <span className="text-sm font-black text-red-400">-{kampanyaSonuc.indirim.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
+                          </div>
+                      )}
+                      <div className="flex justify-between items-end">
+                          <div>
+                              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mb-1">Ödenecek Tutar</p>
+                              <p className="text-slate-500 font-semibold text-sm">Toplam {sepet.reduce((sum, item) => sum + item.miktar, 0)} Ürün</p>
+                          </div>
+                          <div className="text-3xl md:text-5xl font-black tracking-tighter text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.3)]">
+                              {genelToplam.toLocaleString('tr-TR', {minimumFractionDigits: 2})} <span className="text-2xl text-emerald-600 align-super">TL</span>
+                          </div>
                       </div>
                   </div>
               </div>
