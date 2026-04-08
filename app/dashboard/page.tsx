@@ -40,6 +40,7 @@ export default function AnaSayfa() {
     const [topMusteriler, setTopMusteriler] = useState<TopMusteri[]>([]);
     const [bugunFaturaSayisi, setBugunFaturaSayisi] = useState(0);
     const [bugunFaturaTutar, setBugunFaturaTutar] = useState(0);
+    const [buAyMasrafTutar, setBuAyMasrafTutar] = useState(0);
     const [bugunYeniMusteri, setBugunYeniMusteri] = useState(0);
     // Hedef takibi
     const [hedefCiro, setHedefCiro] = useState(0);
@@ -97,6 +98,14 @@ export default function AnaSayfa() {
                 }
                 const { count: bugunYeniCount } = await supabase.from("firmalar").select("id", { count: "exact", head: true }).eq("sahip_sirket_id", sirketId).gte("created_at", bugunStr + "T00:00:00");
                 setBugunYeniMusteri(bugunYeniCount || 0);
+
+                // Bu ay masraf toplamı
+                const simdiD = new Date();
+                const ayBasStr = `${simdiD.getFullYear()}-${(simdiD.getMonth() + 1).toString().padStart(2, "0")}-01`;
+                const { data: masrafData } = await supabase.from("masraflar").select("tutar, kdv_tutari").eq("sirket_id", sirketId).gte("tarih", ayBasStr);
+                if (masrafData) {
+                    setBuAyMasrafTutar(masrafData.reduce((a, m) => a + Number(m.tutar || 0) + Number(m.kdv_tutari || 0), 0));
+                }
 
                 // Son 30 gün - En çok satan ürünler ve en iyi müşteriler
                 const otuzGunOnce = new Date(); otuzGunOnce.setDate(otuzGunOnce.getDate() - 30);
@@ -364,7 +373,7 @@ export default function AnaSayfa() {
                 )}
 
                 {/* BUGÜNÜN ÖZETİ */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="card-kurumsal p-4">
                         <div className="flex items-center gap-3">
                             <div className="w-9 h-9 bg-[#eff6ff] text-[#3b82f6] flex items-center justify-center shrink-0"><i className="fas fa-file-invoice text-sm" /></div>
@@ -400,6 +409,15 @@ export default function AnaSayfa() {
                                 <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Bugünkü Sipariş</div>
                                 <div className="text-[16px] font-bold text-[#0f172a]">{bugunkuSiparisler.length} <span className="text-[11px] font-medium text-[#94a3b8]">adet</span></div>
                                 <div className="text-[11px] font-semibold text-[#7c3aed]">₺{fmtTL(bugunkuCiro)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="card-kurumsal p-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-[#fef2f2] text-[#dc2626] flex items-center justify-center shrink-0"><i className="fas fa-receipt text-sm" /></div>
+                            <div>
+                                <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">Bu Ay Masraf</div>
+                                <div className="text-[16px] font-bold text-[#dc2626]">₺{fmtTL(buAyMasrafTutar)}</div>
                             </div>
                         </div>
                     </div>

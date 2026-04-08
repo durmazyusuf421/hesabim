@@ -13,7 +13,8 @@ interface BankaHareketiRaw { id: number; islem_tipi: string; tutar: number; tari
 interface CekSenetRaw { id: number; yon: string; tutar: number; durum: string; vade_tarihi: string; }
 interface SiparisKalemiRaw { id: number; alis_fiyati: number; miktar: number; siparis_id: number; kdv_orani?: number; birim_fiyat?: number; }
 
-type Sekme = "genel" | "kar-zarar" | "kdv" | "plasiyer";
+type Sekme = "genel" | "kar-zarar" | "kdv" | "plasiyer" | "masraf";
+interface MasrafRaw { id: number; masraf_kategorisi: string; tutar: number; kdv_tutari: number; tarih: string; }
 
 const parseTutar = (val: string | number | null | undefined): number => {
     if (!val) return 0;
@@ -38,6 +39,7 @@ function donemTarih(donem: Donem, ozelBaslangic?: string, ozelBitis?: string): {
 }
 
 const PIE_COLORS = ["#059669", "#3b82f6", "#f59e0b", "#dc2626"];
+const MASRAF_COLORS = ["#6366f1", "#f59e0b", "#06b6d4", "#ef4444", "#8b5cf6", "#10b981", "#3b82f6", "#f97316", "#ec4899", "#64748b"];
 
 export default function RaporlarSayfasi() {
     const { aktifSirket, kullaniciRol, isYonetici, isMuhasebe } = useAuth();
@@ -69,6 +71,8 @@ export default function RaporlarSayfasi() {
     const [plasiyerSiparisler, setPlasiyerSiparisler] = useState<{id:number;plasiyer_id:number;plasiyer_adi:string;toplam_tutar:string|number|null;alici_firma_id?:number;created_at?:string}[]>([]);
     const [plasiyerZiyaretler, setPlasiyerZiyaretler] = useState<{personel_adi:string;id:number}[]>([]);
     const [plasiyerYukleniyor, setPlasiyerYukleniyor] = useState(false);
+    // Masraf verileri
+    const [masraflar, setMasraflar] = useState<MasrafRaw[]>([]);
 
     const sirketId = aktifSirket?.id;
 
@@ -111,6 +115,10 @@ export default function RaporlarSayfasi() {
             setSiparisKalemleri((skRes.data || []).filter(k => donemSiparisIds.has(k.siparis_id)));
             const tumSiparisIds = new Set((tumRes.data || []).map(s => s.id));
             setTumSiparisKalemleri((tumSkRes.data || []).filter(k => tumSiparisIds.has(k.siparis_id)));
+
+            // Masraf verileri
+            const { data: masrafData } = await supabase.from("masraflar").select("id, masraf_kategorisi, tutar, kdv_tutari, tarih").eq("sirket_id", sirketId).order("tarih", { ascending: false });
+            setMasraflar(masrafData || []);
         } catch { /* */ }
         setYukleniyor(false);
     }
@@ -301,6 +309,42 @@ export default function RaporlarSayfasi() {
         return result;
     }, [tumSiparisler, tumBankaHareketleri, tumSiparisKalemleri]);
 
+    // MASRAF RAPORLARI
+    const masrafKategoriDagilimi = useMemo(() => {
+        const map: Record<string, number> = {};
+        masraflar.forEach(m => { map[m.masraf_kategorisi] = (map[m.masraf_kategorisi] || 0) + Number(m.tutar || 0) + Number(m.kdv_tutari || 0); });
+        return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+    }, [masraflar]);
+
+    const aylikMasrafTrend = useMemo(() => {
+        const ayIsimleri = ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"];
+        const result: { ay: string; tutar: number }[] = [];
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(); d.setMonth(d.getMonth() - i);
+            const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+            const label = `${ayIsimleri[d.getMonth()]} ${d.getFullYear().toString().slice(2)}`;
+            const ayMasraf = masraflar.filter(m => m.tarih?.startsWith(key)).reduce((a, m) => a + Number(m.tutar || 0) + Number(m.kdv_tutari || 0), 0);
+            result.push({ ay: label, tutar: ayMasraf });
+        }
+        return result;
+    }, [masraflar]);
+
+    const gelirGiderKarsilastirma = useMemo(() => {
+        const ayIsimleri = ["Oca", "Sub", "Mar", "Nis", "May", "Haz", "Tem", "Agu", "Eyl", "Eki", "Kas", "Ara"];
+        const result: { ay: string; gelir: number; gider: number }[] = [];
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(); d.setMonth(d.getMonth() - i);
+            const key = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
+            const label = `${ayIsimleri[d.getMonth()]} ${d.getFullYear().toString().slice(2)}`;
+            const gelir = tumSiparisler.filter(s => s.created_at?.startsWith(key) && s.durum === "TAMAMLANDI").reduce((a, s) => a + parseTutar(s.toplam_tutar), 0);
+            const gider = masraflar.filter(m => m.tarih?.startsWith(key)).reduce((a, m) => a + Number(m.tutar || 0) + Number(m.kdv_tutari || 0), 0);
+            result.push({ ay: label, gelir, gider });
+        }
+        return result;
+    }, [tumSiparisler, masraflar]);
+
+    const toplamMasraf = useMemo(() => masraflar.reduce((a, m) => a + Number(m.tutar || 0) + Number(m.kdv_tutari || 0), 0), [masraflar]);
+
     // EXCEL / PDF EXPORT
     const raporExcelExport = () => {
         const cols = [{header:"Ay",key:"ay",width:15},{header:"Ciro (TL)",key:"tutar",width:18}];
@@ -327,7 +371,7 @@ export default function RaporlarSayfasi() {
         <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
             {/* SEKME BAR */}
             <div className="flex items-center gap-0 shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--c-border)", background: "white" }}>
-                {([{ key: "genel", label: "Genel Raporlar", icon: "fa-chart-bar" }, { key: "kar-zarar", label: "Kar / Zarar", icon: "fa-balance-scale" }, { key: "kdv", label: "KDV Beyannamesi", icon: "fa-file-invoice-dollar" }, { key: "plasiyer", label: "Plasiyer Raporu", icon: "fa-user-tie" }] as { key: Sekme; label: string; icon: string }[]).map(s => (
+                {([{ key: "genel", label: "Genel Raporlar", icon: "fa-chart-bar" }, { key: "kar-zarar", label: "Kar / Zarar", icon: "fa-balance-scale" }, { key: "masraf", label: "Masraf Raporu", icon: "fa-receipt" }, { key: "kdv", label: "KDV Beyannamesi", icon: "fa-file-invoice-dollar" }, { key: "plasiyer", label: "Plasiyer Raporu", icon: "fa-user-tie" }] as { key: Sekme; label: string; icon: string }[]).map(s => (
                     <button key={s.key} onClick={() => setSekme(s.key)}
                         className={`px-3 md:px-5 py-2 md:py-2.5 text-[10px] md:text-[11px] font-semibold transition-colors border-b-2 whitespace-nowrap ${sekme === s.key ? "text-[#0f172a] border-[#0f172a]" : "text-[#94a3b8] border-transparent hover:text-[#64748b]"}`}>
                         <i className={`fas ${s.icon} mr-1 md:mr-1.5 text-[9px] md:text-[10px]`} />{s.label}
@@ -776,6 +820,102 @@ export default function RaporlarSayfasi() {
                         </div>
                     </div>
                 </div>
+                </>}
+
+                {sekme === "masraf" && <>
+                    {/* MASRAF ÖZET */}
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-red-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">Toplam Masraf</div>
+                            <div className="text-[18px] font-bold text-[#dc2626]">{`₺${fmtTL(toplamMasraf)}`}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-blue-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">Kategori Sayisi</div>
+                            <div className="text-[18px] font-bold text-[#3b82f6]">{masrafKategoriDagilimi.length}</div>
+                        </div>
+                        <div className="bg-white border border-slate-200 border-l-4 border-l-amber-500 p-4">
+                            <div className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider mb-1">En Yuksek Kategori</div>
+                            <div className="text-[14px] font-bold text-[#0f172a]">{masrafKategoriDagilimi[0]?.name || "-"}</div>
+                            {masrafKategoriDagilimi[0] && <div className="text-[11px] font-semibold text-[#f59e0b]">{`₺${fmtTL(masrafKategoriDagilimi[0].value)}`}</div>}
+                        </div>
+                    </div>
+
+                    {/* KATEGORİYE GÖRE DAĞILIM (PIE) + LİSTE */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="card-kurumsal">
+                            <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                <div className="text-[13px] font-semibold text-[#0f172a]">Kategoriye Gore Masraf Dagilimi</div>
+                            </div>
+                            <div className="p-4" style={{ height: 300 }}>
+                                {masrafKategoriDagilimi.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={masrafKategoriDagilimi} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} %${((percent ?? 0) * 100).toFixed(0)}`} labelLine={false} style={{ fontSize: 10, fontWeight: 600 }}>
+                                                {masrafKategoriDagilimi.map((_, idx) => <Cell key={idx} fill={MASRAF_COLORS[idx % MASRAF_COLORS.length]} />)}
+                                            </Pie>
+                                            <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                                            <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "none", borderRadius: 0, padding: "8px 14px", fontSize: 12 }} itemStyle={{ color: "#f1f5f9", fontWeight: 700 }} formatter={(value) => [`₺${fmtTL(Number(value))}`, ""]} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                ) : <div className="h-full flex items-center justify-center text-sm text-slate-400 font-bold">Masraf verisi yok</div>}
+                            </div>
+                        </div>
+                        <div className="card-kurumsal">
+                            <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                                <div className="text-[13px] font-semibold text-[#0f172a]">Kategori Detay</div>
+                            </div>
+                            <div className="p-4 space-y-2">
+                                {masrafKategoriDagilimi.map((k, i) => (
+                                    <div key={k.name} className="flex items-center gap-3 py-1.5" style={{ borderBottom: i < masrafKategoriDagilimi.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                                        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: MASRAF_COLORS[i % MASRAF_COLORS.length] }}></span>
+                                        <div className="flex-1 text-[12px] font-medium text-[#334155]">{k.name}</div>
+                                        <div className="text-[12px] font-bold text-[#0f172a] tabular-nums">{`₺${fmtTL(k.value)}`}</div>
+                                        <div className="text-[10px] text-[#94a3b8] w-10 text-right">{toplamMasraf > 0 ? `%${((k.value / toplamMasraf) * 100).toFixed(0)}` : "-"}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* AYLIK MASRAF TRENDİ */}
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">Aylik Masraf Trendi</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5">Son 12 ay</div>
+                        </div>
+                        <div className="p-4 md:p-5" style={{ height: 300 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={aylikMasrafTrend} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="ay" tick={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 10, fontWeight: 500, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()} />
+                                    <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "none", borderRadius: 0, padding: "8px 14px", fontSize: 12 }} labelStyle={{ color: "#64748b", fontSize: 11, fontWeight: 600 }} itemStyle={{ color: "#f1f5f9", fontSize: 13, fontWeight: 700 }} formatter={(value) => [`₺${fmtTL(Number(value))}`, "Masraf"]} />
+                                    <Bar dataKey="tutar" fill="#dc2626" radius={[2, 2, 0, 0]} maxBarSize={36} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* GELİR vs GİDER KARŞILAŞTIRMASI */}
+                    <div className="card-kurumsal">
+                        <div className="px-5 py-3" style={{ borderBottom: "1px solid var(--c-border)" }}>
+                            <div className="text-[13px] font-semibold text-[#0f172a]">Gelir vs Gider Karsilastirmasi</div>
+                            <div className="text-[10px] text-[#94a3b8] mt-0.5">Son 12 ay satis geliri ile masraf karsilastirmasi</div>
+                        </div>
+                        <div className="p-4 md:p-5" style={{ height: 340 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart data={gelirGiderKarsilastirma} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="ay" tick={{ fontSize: 10, fontWeight: 600, fill: "#94a3b8" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 10, fontWeight: 500, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v.toString()} />
+                                    <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "none", borderRadius: 0, padding: "8px 14px", fontSize: 12 }} labelStyle={{ color: "#64748b", fontSize: 11, fontWeight: 600 }} itemStyle={{ color: "#f1f5f9", fontSize: 12, fontWeight: 600 }} formatter={(value) => [`₺${fmtTL(Number(value))}`, ""]} />
+                                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                                    <Bar dataKey="gelir" fill="#059669" name="Gelir" radius={[2, 2, 0, 0]} maxBarSize={28} />
+                                    <Bar dataKey="gider" fill="#dc2626" name="Gider" radius={[2, 2, 0, 0]} maxBarSize={28} />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
                 </>}
             </div>
         </main>
