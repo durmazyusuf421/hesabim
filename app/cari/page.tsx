@@ -110,17 +110,18 @@ export default function CariKartlarSayfasi() {
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);
         try {
-            const resF = await supabase.from("firmalar").select("id, unvan, bakiye, telefon, puan, musteri_seviyesi").eq("sahip_sirket_id", sirketId);
-            const firmalar: CariOzet[] = (resF.data || []).map((f: FirmaRow) => ({
-                id: `F-${f.id}`, gercekId: Number(f.id), tip: 'firma', isim: String(f.unvan || ""), bakiye: parseTutar(f.bakiye), telefon: f.telefon || "", puan: f.puan || 0, musteri_seviyesi: f.musteri_seviyesi || "BRONZ"
+            const { data } = await supabase.from("firmalar").select("id, unvan, bakiye, telefon, puan, musteri_seviyesi, firma_tipi, cari_kodu").eq("sahip_sirket_id", sirketId);
+            const liste: CariOzet[] = (data || []).map((f: any) => ({
+                id: f.firma_tipi === "Bireysel" ? `C-${f.id}` : `F-${f.id}`,
+                gercekId: Number(f.id),
+                tip: f.firma_tipi === "Bireysel" ? "cari" : "firma",
+                isim: String(f.unvan || ""),
+                bakiye: parseTutar(f.bakiye),
+                telefon: f.telefon || "",
+                puan: f.puan || 0,
+                musteri_seviyesi: f.musteri_seviyesi || "BRONZ",
             }));
-
-            const resC = await supabase.from("firmalar").select("id, unvan, bakiye, telefon, puan, musteri_seviyesi").eq("sahip_sirket_id", sirketId).eq("firma_tipi", "Bireysel");
-            const cariKartlar: CariOzet[] = (resC.data || []).map((c: FirmaRow) => ({
-                id: `C-${c.id}`, gercekId: Number(c.id), tip: 'cari', isim: String(c.unvan || ""), bakiye: parseTutar(c.bakiye), telefon: c.telefon || "", puan: c.puan || 0, musteri_seviyesi: c.musteri_seviyesi || "BRONZ"
-            }));
-
-            setCariler([...firmalar, ...cariKartlar].sort((a,b) => a.isim.localeCompare(b.isim)));
+            setCariler(liste.sort((a, b) => a.isim.localeCompare(b.isim)));
         } catch { /* veri çekme hatası */ }
         setYukleniyor(false);
     }
@@ -174,11 +175,19 @@ export default function CariKartlarSayfasi() {
         setB2bIslemYapiliyor(false);
     };
 
-    const yeniCariEkraniAc = () => {
+    const yeniCariEkraniAc = async () => {
         setDuzenleCarId(null);
+        // Otomatik cari kodu üret: C-001, C-002, ...
+        let sonrakiKod = "C-001";
+        if (aktifSirket) {
+            const { data } = await supabase.from("firmalar").select("cari_kodu").eq("sahip_sirket_id", aktifSirket.id).not("cari_kodu", "is", null).order("cari_kodu", { ascending: false }).limit(1);
+            if (data && data.length > 0 && data[0].cari_kodu) {
+                const match = data[0].cari_kodu.match(/C-(\d+)/);
+                if (match) sonrakiKod = `C-${String(Number(match[1]) + 1).padStart(3, "0")}`;
+            }
+        }
         setYeniCari({
-            kodu: "C" + Math.floor(10000 + Math.random() * 90000).toString(),
-            isim: "", tip: "firma", bakiye: "", telefon: "", telefon2: "", email: "", il: "", ilce: "", adres: "", vergiDairesi: "", vergiNo: ""
+            kodu: sonrakiKod, isim: "", tip: "firma", bakiye: "", telefon: "", telefon2: "", email: "", il: "", ilce: "", adres: "", vergiDairesi: "", vergiNo: ""
         });
         setAktifSekme("genel");
         setYeniCariModalAcik(true);
@@ -190,7 +199,7 @@ export default function CariKartlarSayfasi() {
         if (!data) { toast.error("Cari bilgileri yüklenemedi"); return; }
         setDuzenleCarId(cari.gercekId);
         setYeniCari({
-            kodu: `F-${cari.gercekId}`,
+            kodu: data.cari_kodu || `F-${cari.gercekId}`,
             isim: data.unvan || "",
             tip: data.firma_tipi === "Bireysel" ? "cari" : "firma",
             bakiye: String(data.bakiye || ""),
@@ -213,12 +222,25 @@ export default function CariKartlarSayfasi() {
         try {
             if (!aktifSirket) return;
             const baslangicBakiyesi = parseTutar(yeniCari.bakiye);
+            const cariKodu = yeniCari.kodu.trim();
+
+            // Duplicate cari kodu kontrolü
+            if (cariKodu) {
+                const { data: mevcutKod } = await supabase.from("firmalar").select("id").eq("sahip_sirket_id", aktifSirket.id).eq("cari_kodu", cariKodu);
+                const duplikat = mevcutKod?.filter(m => m.id !== duzenleCarId);
+                if (duplikat && duplikat.length > 0) {
+                    toast.error("Bu cari kodu zaten kullanılıyor!");
+                    setIslemBekliyor(false);
+                    return;
+                }
+            }
 
             if (duzenleCarId) {
                 // GÜNCELLEME MODU
                 const { error } = await supabase.from('firmalar').update({
                     unvan: yeniCari.isim.trim(),
                     bakiye: baslangicBakiyesi,
+                    cari_kodu: cariKodu || null,
                     telefon: yeniCari.telefon || null,
                     telefon2: yeniCari.telefon2 || null,
                     eposta: yeniCari.email || null,
@@ -232,13 +254,13 @@ export default function CariKartlarSayfasi() {
                 toast.success("Cari kart güncellendi!");
             } else if (yeniCari.tip === 'firma') {
                 const { error } = await supabase.from('firmalar').insert([{
-                    unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id
+                    unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id, cari_kodu: cariKodu || null
                 }]);
                 if (error) throw error;
                 toast.success("Cari kart başarıyla oluşturuldu!");
             } else {
                 const { error } = await supabase.from('firmalar').insert([{
-                    unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id, firma_tipi: 'Bireysel'
+                    unvan: yeniCari.isim.trim(), bakiye: baslangicBakiyesi, telefon: yeniCari.telefon, sahip_sirket_id: aktifSirket.id, firma_tipi: 'Bireysel', cari_kodu: cariKodu || null
                 }]);
                 if (error) throw new Error(error.message || JSON.stringify(error));
                 toast.success("Cari kart başarıyla oluşturuldu!");
