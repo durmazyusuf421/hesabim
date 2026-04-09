@@ -463,7 +463,7 @@ export default function FaturaMerkezi() {
   const kdvToplamHesapla = () => faturaKalemleri.reduce((acc, k) => acc + ((pf(k.miktar) * pf(k.birim_fiyat)) * (k.kdv_orani / 100)), 0);
   const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
-  const faturaYazdir = () => {
+  const faturaYazdir = async () => {
       const cariId = Number(faturaForm.cari_id);
       const cariFirma = firmalar.find(fr => fr.id === cariId);
       const faturaKayit = faturalar.find(f => f.id === seciliFaturaId);
@@ -606,12 +606,46 @@ export default function FaturaMerkezi() {
 
 </body></html>`;
 
-      const w = window.open("", "_blank", "width=820,height=700");
-      if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
-      w.document.write(html);
-      w.document.close();
-      w.focus();
-      setTimeout(() => { w.print(); w.close(); }, 500);
+      const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+
+      if (isMobile) {
+          // Mobil: jsPDF ile PDF oluştur ve indir
+          const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const container = document.createElement("div");
+          container.innerHTML = html;
+          container.style.cssText = "position:absolute;left:-9999px;top:0;width:210mm;";
+          document.body.appendChild(container);
+          const body = container.querySelector("body") || container;
+          try {
+              await doc.html(body as HTMLElement, {
+                  callback: (d) => {
+                      d.save(`Fatura_${faturaForm.fatura_no || "belge"}.pdf`);
+                  },
+                  x: 10, y: 10,
+                  width: 190,
+                  windowWidth: 794,
+              });
+          } catch {
+              // html() fallback: blob ile indir
+              const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `Fatura_${faturaForm.fatura_no || "belge"}.html`;
+              a.click();
+              URL.revokeObjectURL(url);
+          } finally {
+              document.body.removeChild(container);
+          }
+      } else {
+          // Masaüstü: mevcut davranış
+          const w = window.open("", "_blank", "width=820,height=700");
+          if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
+          w.document.write(html);
+          w.document.close();
+          w.focus();
+          setTimeout(() => { w.print(); w.close(); }, 500);
+      }
   };
 
   const kaydet = async () => {
