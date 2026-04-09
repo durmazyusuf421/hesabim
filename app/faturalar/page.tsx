@@ -608,17 +608,20 @@ export default function FaturaMerkezi() {
 
       const isMobilTablet = /Android|iPhone|iPad/i.test(navigator.userAgent) || window.innerWidth < 1024;
 
-      const w = window.open("", "_blank", "width=820,height=700");
+      const w = window.open("", "_blank");
       if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
       w.document.write(html);
       w.document.close();
-      w.focus();
 
-      if (!isMobilTablet) {
-          // PC: otomatik yazdır
-          setTimeout(() => { w.print(); }, 500);
+      if (isMobilTablet) {
+          // Tablet/mobil: sayfa açık kalır, kullanıcı tarayıcıdan yazdırır
+          // w.close() KESINLIKLE ÇAĞRILMAZ
+          return;
       }
-      // Tablet/Mobil: sayfa açılır, kullanıcı manuel yazdırır veya PDF kaydeder
+
+      // Sadece masaüstü: otomatik print ve kapat
+      w.focus();
+      setTimeout(() => { w.print(); w.close(); }, 800);
   };
 
   const kaydet = async () => {
