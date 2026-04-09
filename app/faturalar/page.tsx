@@ -606,30 +606,44 @@ export default function FaturaMerkezi() {
 
 </body></html>`;
 
-      // jsPDF ile PDF oluştur ve direkt indir (mobil + masaüstü)
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const container = document.createElement("div");
-      container.innerHTML = html;
-      container.style.cssText = "position:absolute;left:-9999px;top:0;width:210mm;";
-      document.body.appendChild(container);
-      try {
-          await doc.html(container, {
-              x: 10, y: 10,
-              width: 190,
-              windowWidth: 794,
-              callback: () => {},
-          });
-          const blob = doc.output("blob");
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `Fatura_${faturaForm.fatura_no || "belge"}.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-      } catch {
-          toast.error("PDF oluşturulamadı. Tarayıcınızı güncelleyin.");
-      } finally {
-          document.body.removeChild(container);
+      const isMobilVeTablet = /Android|iPhone|iPad|Tablet/i.test(navigator.userAgent) || window.innerWidth < 1024;
+
+      if (isMobilVeTablet) {
+          // Mobil/Tablet: jsPDF ile PDF oluştur ve indir
+          const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const container = document.createElement("div");
+          container.innerHTML = html;
+          container.style.cssText = "position:absolute;left:-9999px;top:0;width:210mm;";
+          document.body.appendChild(container);
+          try {
+              await doc.html(container, {
+                  x: 10, y: 10,
+                  width: 190,
+                  windowWidth: 794,
+                  callback: () => {},
+              });
+              const blob = doc.output("blob");
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `Fatura_${faturaForm.fatura_no || "belge"}.pdf`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+          } catch {
+              toast.error("PDF oluşturulamadı. Tarayıcınızı güncelleyin.");
+          } finally {
+              document.body.removeChild(container);
+          }
+      } else {
+          // PC: mevcut window.print() davranışı
+          const w = window.open("", "_blank", "width=820,height=700");
+          if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
+          w.document.write(html);
+          w.document.close();
+          w.focus();
+          setTimeout(() => { w.print(); w.close(); }, 500);
       }
   };
 
