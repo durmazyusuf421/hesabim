@@ -8,13 +8,13 @@ import Link from "next/link";
 import { excelExport, pdfExport } from "@/app/lib/export";
 import { useBirimler } from "@/app/lib/useBirimler";
 interface Urun {
-    id: number; urun_adi: string; barkod?: string; stok_miktari: number;
+    id: number; urun_adi: string; barkod?: string; stok_kodu?: string; stok_miktari: number;
     birim: string; alis_fiyati: number; satis_fiyati: number; kdv_orani: number;
     aktif?: boolean; min_stok_miktari?: number; kategori_id?: number | null;
     doviz_turu?: string; doviz_fiyati?: number; lot_takibi?: boolean; seri_takibi?: boolean;
 }
 interface FormDataState {
-    urun_adi: string; barkod: string; stok_miktari: number; birim: string;
+    urun_adi: string; barkod: string; stok_kodu: string; stok_miktari: number; birim: string;
     alis_fiyati: number; satis_fiyati: number; kdv_orani: number; min_stok_miktari: number;
     kategori_id: number | null; doviz_turu: string; doviz_fiyati: number; lot_takibi: boolean; seri_takibi: boolean;
 }
@@ -84,7 +84,7 @@ export default function StokKartlari() {
   const [yeniBirimKisaltma, setYeniBirimKisaltma] = useState("");
 
   const [formData, setFormData] = useState<FormDataState>({
-      urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
+      urun_adi: "", barkod: "", stok_kodu: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
   });
 
   const sirketId = aktifSirket?.id;
@@ -121,16 +121,25 @@ export default function StokKartlari() {
 
   const hasAccess = aktifSirket?.rol === "PERAKENDE" || isDepocu;
 
-  const yeniUrunEkle = () => {
+  const yeniUrunEkle = async () => {
       setDuzenlemeModu(false); setSeciliUrunId(null);
-      setFormData({ urun_adi: "", barkod: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false });
+      // Otomatik stok kodu üret: 00001, 00002, ...
+      let sonrakiKod = "00001";
+      if (aktifSirket) {
+          const { data } = await supabase.from("urunler").select("stok_kodu").eq("sahip_sirket_id", aktifSirket.id).not("stok_kodu", "is", null).order("stok_kodu", { ascending: false }).limit(1);
+          if (data && data.length > 0 && data[0].stok_kodu) {
+              const num = parseInt(data[0].stok_kodu, 10);
+              if (!isNaN(num)) sonrakiKod = String(num + 1).padStart(5, "0");
+          }
+      }
+      setFormData({ urun_adi: "", barkod: "", stok_kodu: sonrakiKod, stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false });
       setModalAcik(true);
   };
 
   const urunDuzenle = (urun: Urun) => {
       setDuzenlemeModu(true); setSeciliUrunId(urun.id);
       setFormData({
-          urun_adi: urun.urun_adi, barkod: urun.barkod || "", stok_miktari: urun.stok_miktari, birim: urun.birim,
+          urun_adi: urun.urun_adi, barkod: urun.barkod || "", stok_kodu: urun.stok_kodu || "", stok_miktari: urun.stok_miktari, birim: urun.birim,
           alis_fiyati: urun.alis_fiyati, satis_fiyati: urun.satis_fiyati, kdv_orani: urun.kdv_orani, min_stok_miktari: urun.min_stok_miktari || 0,
           kategori_id: urun.kategori_id || null, doviz_turu: urun.doviz_turu || "TRY", doviz_fiyati: Number(urun.doviz_fiyati) || 0,
           lot_takibi: urun.lot_takibi || false, seri_takibi: urun.seri_takibi || false
@@ -147,7 +156,19 @@ export default function StokKartlari() {
 
   const formuKaydet = async () => {
       if (!formData.urun_adi) { toast.error("Ürün adı zorunludur!"); return; }
-      const kaydedilecekVeri = { ...formData, sahip_sirket_id: aktifSirket?.id };
+      const stokKodu = formData.stok_kodu.trim();
+
+      // Duplicate stok kodu kontrolü
+      if (stokKodu && aktifSirket) {
+          const { data: mevcutKod } = await supabase.from("urunler").select("id").eq("sahip_sirket_id", aktifSirket.id).eq("stok_kodu", stokKodu);
+          const duplikat = mevcutKod?.filter(m => m.id !== seciliUrunId);
+          if (duplikat && duplikat.length > 0) {
+              toast.error("Bu stok kodu zaten kullanılıyor!");
+              return;
+          }
+      }
+
+      const kaydedilecekVeri = { ...formData, stok_kodu: stokKodu || null, sahip_sirket_id: aktifSirket?.id };
 
       if (duzenlemeModu && seciliUrunId) {
           const { error } = await supabase.from("urunler").update(kaydedilecekVeri).eq("id", seciliUrunId);
@@ -508,7 +529,7 @@ export default function StokKartlari() {
                                         <span className={`text-[12px] font-semibold tabular-nums ${kritik ? 'text-[#dc2626]' : Number(u.stok_miktari) <= 0 ? 'text-[#dc2626]' : 'text-[#059669]'}`}>{u.stok_miktari} {u.birim}</span>
                                     </div>
                                     <div className="text-[11px] text-[#64748b]">
-                                        {u.barkod ? `Barkod: ${u.barkod}` : 'Barkod yok'} | KDV: %{u.kdv_orani}
+                                        {u.stok_kodu ? `Kod: ${u.stok_kodu} | ` : ''}{u.barkod ? `Barkod: ${u.barkod}` : 'Barkod yok'} | KDV: %{u.kdv_orani}
                                         {kritik && <span className="text-red-500 font-bold ml-2">| Min: {u.min_stok_miktari}</span>}
                                     </div>
                                     <div className="flex justify-between items-center mt-2">
@@ -637,10 +658,14 @@ export default function StokKartlari() {
 
             <div className="p-4 bg-white space-y-4 overflow-y-auto">
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="sm:col-span-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Ürün Adı</label>
                         <input type="text" value={formData.urun_adi} onChange={(e) => setFormData({...formData, urun_adi: e.target.value})} className="input-kurumsal w-full" placeholder="Örn: 5LT Ayçiçek Yağı" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Stok Kodu</label>
+                        <input type="text" value={formData.stok_kodu} onChange={(e) => setFormData({...formData, stok_kodu: e.target.value})} className="input-kurumsal w-full font-mono font-semibold text-[#1d4ed8]" placeholder="00001" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Barkod (POS İçin)</label>
