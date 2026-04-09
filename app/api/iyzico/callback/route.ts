@@ -61,8 +61,7 @@ export async function POST(req: NextRequest) {
       alacak: tutar,
     };
 
-    if (cariTip === "firma") insertData.firma_id = gercekId;
-    else insertData.cari_kart_id = gercekId;
+    insertData.firma_id = gercekId;
 
     const { error: insertError } = await supabaseAdmin.from("cari_hareketler").insert([insertData]);
     if (insertError) {

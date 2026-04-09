@@ -8,7 +8,6 @@ interface CariOzet { id: string; gercekId: number; tip: string; isim: string; ba
 interface Kalem { id: number; cinsi: string; adi: string; tutar: string; aciklama: string; }
 interface Evrak { islemTipi: string; seri: string; sira: string; tarih: string; cariId: string; cariAdi: string; bakiye: number; proje: string; personel: string; aciklama: string; }
 interface FirmaRow { id: number; unvan: string; bakiye: string | number | null; }
-interface CariKartRow { id: number; cari_adi: string; bakiye: string | number | null; borc_bakiye: string | number | null; alacak_bakiye: string | number | null; }
 interface CariHareketRow { id: number; tarih?: string; created_at?: string; islem_tipi: string; aciklama?: string; borc: string | number | null; alacak: string | number | null; firma_id?: number; }
 interface CariHareketInsert { sahip_sirket_id: number | undefined; islem_tipi: string; aciklama: string; tarih: string; borc: number; alacak: number; firma_id?: number; }
 
@@ -29,7 +28,7 @@ const formatTutarString = (val: number): string => {
     return val.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export default function TahsilatErpSayfasi() {
+export default function PortalTahsilatSayfasi() {
     const { aktifSirket } = useAuth();
     const toast = useToast();
     const { onayla, OnayModal } = useOnayModal();
@@ -38,11 +37,6 @@ export default function TahsilatErpSayfasi() {
     const [cariler, setCariler] = useState<CariOzet[]>([]);
     const [gecmisHareketler, setGecmisHareketler] = useState<CariHareketRow[]>([]);
     const [gecmisModalAcik, setGecmisModalAcik] = useState<boolean>(false);
-
-    // Iyzico stateleri
-    const [iyzicoModalAcik, setIyzicoModalAcik] = useState<boolean>(false);
-    const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string>("");
-    const [iyzicoYukleniyor, setIyzicoYukleniyor] = useState<boolean>(false);
 
     // Form Stateleri
     const [evrak, setEvrak] = useState<Evrak>({
@@ -63,11 +57,9 @@ export default function TahsilatErpSayfasi() {
     ]);
 
     const sirketId = aktifSirket?.id;
-    const sirketRol = aktifSirket?.rol;
 
     useEffect(() => {
         if (!sirketId) return;
-        if (sirketRol !== "TOPTANCI") { window.location.href = "/login"; return; }
         verileriGetir(sirketId);
 
         // Iyzico callback sonrası URL parametrelerini kontrol et
@@ -77,9 +69,9 @@ export default function TahsilatErpSayfasi() {
         if (iyzicoStatus && iyzicoMsg) {
             if (iyzicoStatus === "success") toast.success(iyzicoMsg);
             else toast.error(iyzicoMsg);
-            window.history.replaceState({}, "", "/tahsilat");
+            window.history.replaceState({}, "", "/portal/tahsilat");
         }
-    }, [sirketId, sirketRol]);
+    }, [sirketId]);
 
     async function verileriGetir(sirketId: number) {
         setYukleniyor(true);
@@ -189,7 +181,6 @@ export default function TahsilatErpSayfasi() {
             setKalemler([{ id: Date.now(), cinsi: "Nakit", adi: "KASA", tutar: "", aciklama: "" }]);
             // Cariler listesini yenile ve seçili carinin bakiyesini güncelle
             await verileriGetir(aktifSirket?.id || 0);
-            // verileriGetir sonrası cariler güncellendiğinde seçili carinin yeni bakiyesini al
             setEvrak(prev => ({ ...prev, cariId: kaydedilenCariId, cariAdi: kaydedilenCariAdi, bakiye: yeniBakiye }));
         } catch {
         }
@@ -210,37 +201,6 @@ export default function TahsilatErpSayfasi() {
                 toast.success("Makbuz silindi.");
             }
         });
-    };
-
-    const iyzicoOdemeBaslat = async () => {
-        if (!evrak.cariId) { toast.error("Lütfen önce bir Cari seçin!"); return; }
-        if (evrak.bakiye <= 0) { toast.error("Bu carinin borcu bulunmuyor!"); return; }
-        const seciliCari = cariler.find(c => c.id === evrak.cariId);
-        if (!seciliCari) return;
-
-        setIyzicoYukleniyor(true);
-        try {
-            const res = await fetch("/api/iyzico/checkout", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    tutar: seciliCari.bakiye,
-                    cariAdi: seciliCari.isim,
-                    cariId: seciliCari.id,
-                    cariTip: seciliCari.tip,
-                    gercekId: seciliCari.gercekId,
-                    sahipSirketId: aktifSirket?.id,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) { toast.error(data.error || "Iyzico hatası"); return; }
-            setIyzicoFormHtml(data.checkoutFormContent);
-            setIyzicoModalAcik(true);
-        } catch {
-            toast.error("Ödeme formu yüklenemedi!");
-        } finally {
-            setIyzicoYukleniyor(false);
-        }
     };
 
     const evrakToplamiFloat = kalemler.reduce((acc, k) => acc + parseTutarToFloat(k.tutar), 0);
@@ -265,9 +225,6 @@ export default function TahsilatErpSayfasi() {
                     </button>
                     <button onClick={formuTemizle} className="btn-secondary flex items-center gap-2">
                         <i className="fas fa-eraser text-[10px]" /> TEMİZLE
-                    </button>
-                    <button onClick={iyzicoOdemeBaslat} disabled={iyzicoYukleniyor || !evrak.cariId || evrak.bakiye <= 0} className="btn-secondary flex items-center gap-2 disabled:opacity-50">
-                        {iyzicoYukleniyor ? <><i className="fas fa-spinner fa-spin text-[10px]" /> Yükleniyor...</> : <><i className="fas fa-credit-card text-[10px]" /> KREDİ KARTIYLA TAHSİL ET</>}
                     </button>
                     <button onClick={() => setGecmisModalAcik(true)} className="btn-secondary flex items-center gap-2">
                         <i className="fas fa-history text-[10px]" /> GEÇMİŞ MAKBUZLAR
@@ -531,28 +488,6 @@ export default function TahsilatErpSayfasi() {
                 </div>
 
             </main>
-
-            {/* IYZICO ÖDEME FORMU MODALI */}
-            {iyzicoModalAcik && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-0 md:p-4">
-                    <div className="bg-white w-full h-full md:h-auto md:max-w-lg overflow-hidden flex flex-col md:max-h-[90vh]" style={{ border: "1px solid var(--c-border)" }}>
-                        <div className="p-3 flex justify-between items-center text-white shrink-0" style={{ background: "#059669", borderBottom: "1px solid var(--c-border)" }}>
-                            <h3 className="text-sm font-semibold flex items-center uppercase tracking-widest">
-                                <i className="fas fa-credit-card mr-2"></i> Kredi Kartı ile Ödeme
-                            </h3>
-                            <button onClick={() => { setIyzicoModalAcik(false); setIyzicoFormHtml(""); }} className="hover:text-red-300 transition-colors"><i className="fas fa-times text-lg"></i></button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-4">
-                            <div className="mb-3 p-3 text-xs" style={{ background: "#f8fafc", border: "1px solid var(--c-border)" }}>
-                                <span className="font-semibold text-[#059669]">Cari:</span> <span className="font-semibold text-slate-700">{evrak.cariAdi}</span>
-                                <span className="mx-3 text-slate-300">|</span>
-                                <span className="font-semibold text-[#059669]">Tutar:</span> <span className="font-semibold text-[#059669]">{evrak.bakiye.toLocaleString('tr-TR', {minimumFractionDigits: 2})} TL</span>
-                            </div>
-                            <div dangerouslySetInnerHTML={{ __html: iyzicoFormHtml }} />
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {gecmisModalAcik && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-0 md:p-4">

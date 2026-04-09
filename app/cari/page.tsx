@@ -286,8 +286,7 @@ export default function CariKartlarSayfasi() {
         setOzelFiyatArama("");
         try {
             const combinedData: HareketKaydi[] = [];
-            const hareketFiltre = cari.tip === 'firma' ? { firma_id: cari.gercekId } : { cari_kart_id: cari.gercekId };
-            const { data: dHareket } = await supabase.from('cari_hareketler').select('*').match(hareketFiltre);
+            const { data: dHareket } = await supabase.from('cari_hareketler').select('*').eq('firma_id', cari.gercekId);
 
             if (dHareket) {
                 dHareket.forEach((h: CariHareketRow) => {
