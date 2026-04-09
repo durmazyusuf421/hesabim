@@ -621,13 +621,7 @@ export default function FaturaMerkezi() {
       w.document.write(html);
       w.document.close();
       w.focus();
-
-      // Sadece masaüstü PC'de otomatik yazdır
-      const isMobilTablet = window.innerWidth < 1024 || /Android|iPhone|iPad/i.test(navigator.userAgent);
-      if (!isMobilTablet) {
-          setTimeout(() => { w.print(); }, 800);
-      }
-      // w.close() HİÇBİR YERDE ÇAĞRILMIYOR
+      setTimeout(() => { w.print(); }, 800);
   };
 
   const kaydet = async () => {
