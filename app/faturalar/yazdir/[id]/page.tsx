@@ -60,20 +60,14 @@ export default function FaturaYazdirSayfasi() {
     const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
     return (
-        <>
-            <style jsx global>{`
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "white", overflow: "auto" }}>
+            <style>{`
                 @page { size: A4; margin: 15mm; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1a; max-width: 210mm; margin: 0 auto; padding: 15mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                @media print {
-                    body { padding: 0; }
-                    .no-print { display: none !important; }
-                    .no-break { page-break-inside: avoid; }
-                }
+                @media print { .no-print { display: none !important; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
             `}</style>
 
             {/* TOOLBAR */}
-            <div className="no-print" style={{ position: "fixed", top: 0, left: 0, right: 0, background: "#1e3a5f", padding: 12, textAlign: "center", zIndex: 9999, display: "flex", gap: 10, justifyContent: "center" }}>
+            <div className="no-print" style={{ position: "sticky", top: 0, background: "#1e3a5f", padding: 12, textAlign: "center", zIndex: 10, display: "flex", gap: 10, justifyContent: "center" }}>
                 <button onClick={() => window.print()} style={{ background: "#28a745", color: "white", border: "none", padding: "10px 30px", borderRadius: 6, fontSize: 16, cursor: "pointer" }}>
                     🖨️ Yazdır / PDF Kaydet
                 </button>
@@ -82,7 +76,7 @@ export default function FaturaYazdirSayfasi() {
                 </button>
             </div>
 
-            <div style={{ marginTop: 60 }}>
+            <div style={{ maxWidth: "210mm", margin: "0 auto", padding: "15mm", fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt", color: "#1a1a1a" }}>
                 {/* HEADER */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 14, borderBottom: "2px solid #1e3a5f" }}>
                     <div style={{ maxWidth: "55%" }}>
@@ -186,6 +180,6 @@ export default function FaturaYazdirSayfasi() {
                     Bu belge elektronik ortamda oluşturulmuştur.
                 </div>
             </div>
-        </>
+        </div>
     );
 }

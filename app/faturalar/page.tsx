@@ -465,7 +465,7 @@ export default function FaturaMerkezi() {
 
   const faturaYazdir = () => {
       if (!seciliFaturaId) { toast.error("Yazdırılacak fatura seçilmedi!"); return; }
-      window.open(`/faturalar/yazdir/${seciliFaturaId}`, "_blank");
+      window.open(`/faturalar/yazdir/${seciliFaturaId}`, "_blank", "width=900,height=700");
   };
 
   const kaydet = async () => {

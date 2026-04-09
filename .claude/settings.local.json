@@ -41,7 +41,9 @@
       "Bash(xargs grep:*)",
       "Bash(find C:/Users/durma/OneDrive/Desktop/muhasebe-pro -name *.sql -not -path */node_modules/* -exec grep -h \"CREATE TABLE\\\\|ALTER TABLE\" {})",
       "Bash(2)",
-      "Bash(cmd.exe //c \"yedek.bat\")"
+      "Bash(cmd.exe //c \"yedek.bat\")",
+      "Bash(mkdir -p \"C:/Users/durma/OneDrive/Desktop/muhasebe-pro/app/faturalar/yazdir/[id]\")",
+      "Bash(cp \"C:/Users/durma/OneDrive/Desktop/muhasebe-pro/app/\\(yazdir\\)/faturalar/yazdir/[id]/page.tsx\" \"C:/Users/durma/OneDrive/Desktop/muhasebe-pro/app/faturalar/yazdir/[id]/page.tsx\")"
     ]
   }
 }
