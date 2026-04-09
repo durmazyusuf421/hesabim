@@ -25,15 +25,23 @@ export default function FaturaYazdirSayfasi() {
     const [detaylar, setDetaylar] = useState<DetayRow[]>([]);
     const [yukleniyor, setYukleniyor] = useState(true);
 
+    const [hata, setHata] = useState<string | null>(null);
+
     useEffect(() => {
         if (!faturaId || !aktifSirket?.id) return;
         (async () => {
-            const { data: f } = await supabase.from("faturalar").select("*").eq("id", faturaId).eq("sirket_id", aktifSirket.id).single();
-            if (!f) { setYukleniyor(false); return; }
-            setFatura(f as FaturaRow);
-            const { data: d } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", faturaId);
-            setDetaylar((d || []) as DetayRow[]);
-            setYukleniyor(false);
+            try {
+                const { data: f, error: fErr } = await supabase.from("faturalar").select("*").eq("id", faturaId).eq("sirket_id", aktifSirket.id).single();
+                if (fErr || !f) { setHata(fErr?.message || "Fatura bulunamadı."); setYukleniyor(false); return; }
+                setFatura(f as FaturaRow);
+                const { data: d, error: dErr } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", faturaId);
+                if (dErr) { setHata(dErr.message); setYukleniyor(false); return; }
+                setDetaylar((d || []) as DetayRow[]);
+            } catch (e: any) {
+                setHata(e?.message || "Beklenmeyen hata oluştu.");
+            } finally {
+                setYukleniyor(false);
+            }
         })();
     }, [faturaId, aktifSirket?.id]);
 
@@ -44,6 +52,7 @@ export default function FaturaYazdirSayfasi() {
     }, [yukleniyor, fatura]);
 
     if (yukleniyor) return <div style={{ textAlign: "center", padding: 60, fontSize: 18, color: "#64748b" }}>Fatura yükleniyor...</div>;
+    if (hata) return <div style={{ textAlign: "center", padding: 60, fontSize: 18, color: "#ef4444" }}>Hata: {hata}</div>;
     if (!fatura) return <div style={{ textAlign: "center", padding: 60, fontSize: 18, color: "#ef4444" }}>Fatura bulunamadı.</div>;
 
     const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,10 +69,15 @@ export default function FaturaYazdirSayfasi() {
     const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
     return (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "white", overflow: "auto" }}>
+        <div className="yazdir-container" style={{ position: "fixed", inset: 0, zIndex: 99999, background: "white", overflow: "auto" }}>
             <style>{`
                 @page { size: A4; margin: 15mm; }
-                @media print { .no-print { display: none !important; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+                @media print {
+                    .no-print { display: none !important; }
+                    .yazdir-container { position: static !important; overflow: visible !important; }
+                    body { margin: 0; }
+                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                }
             `}</style>
 
             {/* TOOLBAR */}
