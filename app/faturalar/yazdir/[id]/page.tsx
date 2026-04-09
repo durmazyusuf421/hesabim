@@ -46,10 +46,10 @@ export default function FaturaYazdirSayfasi() {
     }, [faturaId, aktifSirket?.id]);
 
     useEffect(() => {
-        if (!yukleniyor && fatura) {
-            setTimeout(() => { window.print(); }, 600);
+        if (fatura) {
+            setTimeout(() => { window.print(); }, 800);
         }
-    }, [yukleniyor, fatura]);
+    }, [fatura]);
 
     if (yukleniyor) return <div style={{ textAlign: "center", padding: 60, fontSize: 18, color: "#64748b" }}>Fatura yükleniyor...</div>;
     if (hata) return <div style={{ textAlign: "center", padding: 60, fontSize: 18, color: "#ef4444" }}>Hata: {hata}</div>;
@@ -73,22 +73,11 @@ export default function FaturaYazdirSayfasi() {
             <style>{`
                 @page { size: A4; margin: 15mm; }
                 @media print {
-                    .no-print { display: none !important; }
                     .yazdir-container { position: static !important; overflow: visible !important; }
                     body { margin: 0; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             `}</style>
-
-            {/* TOOLBAR */}
-            <div className="no-print" style={{ position: "sticky", top: 0, background: "#1e3a5f", padding: 12, textAlign: "center", zIndex: 10, display: "flex", gap: 10, justifyContent: "center" }}>
-                <button onClick={() => window.print()} style={{ background: "#28a745", color: "white", border: "none", padding: "10px 30px", borderRadius: 6, fontSize: 16, cursor: "pointer" }}>
-                    🖨️ Yazdır / PDF Kaydet
-                </button>
-                <button onClick={() => window.close()} style={{ background: "#dc3545", color: "white", border: "none", padding: "10px 30px", borderRadius: 6, fontSize: 16, cursor: "pointer" }}>
-                    ✕ Kapat
-                </button>
-            </div>
 
             <div style={{ maxWidth: "210mm", margin: "0 auto", padding: "15mm", fontFamily: "Arial, Helvetica, sans-serif", fontSize: "10pt", color: "#1a1a1a" }}>
                 {/* HEADER */}
