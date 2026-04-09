@@ -513,11 +513,21 @@ export default function FaturaMerkezi() {
   table { width: 100%; border-collapse: collapse; }
   @media print {
     body { padding: 0; }
+    .no-print { display: none !important; }
     .no-break { page-break-inside: avoid; }
     @page { @bottom-center { content: counter(page); font-size: 8pt; color: #94a3b8; } }
   }
 </style>
 </head><body>
+
+<div class="no-print" style="text-align:center;padding:10px;background:#f8f9fa;border-bottom:1px solid #ddd;position:sticky;top:0;z-index:999;">
+  <button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:15px;cursor:pointer;margin-right:10px;">
+    🖨️ Yazdır
+  </button>
+  <button onclick="window.close()" style="background:#6c757d;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:15px;cursor:pointer;">
+    ✕ Kapat
+  </button>
+</div>
 
 <!-- HEADER -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid #1e3a5f">
