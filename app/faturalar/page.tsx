@@ -513,11 +513,18 @@ export default function FaturaMerkezi() {
   table { width: 100%; border-collapse: collapse; }
   @media print {
     body { padding: 0; }
+    .no-print { display: none !important; }
     .no-break { page-break-inside: avoid; }
     @page { @bottom-center { content: counter(page); font-size: 8pt; color: #94a3b8; } }
   }
 </style>
 </head><body>
+
+<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1e3a5f;padding:12px;text-align:center;z-index:9999;display:flex;gap:10px;justify-content:center;">
+  <button onclick="window.print()" style="background:#28a745;color:white;border:none;padding:10px 30px;border-radius:6px;font-size:16px;cursor:pointer;">🖨️ Yazdır / PDF Kaydet</button>
+  <button onclick="window.close()" style="background:#dc3545;color:white;border:none;padding:10px 30px;border-radius:6px;font-size:16px;cursor:pointer;">✕ Kapat</button>
+</div>
+<div style="margin-top:60px;">
 
 <!-- HEADER -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:14px;border-bottom:2px solid #1e3a5f">
@@ -604,14 +611,14 @@ export default function FaturaMerkezi() {
   Bu belge elektronik ortamda oluşturulmuştur.
 </div>
 
+</div>
 </body></html>`;
 
       const w = window.open("", "_blank");
-      if (!w) { toast.error("Popup engelleyici aktif. Lütfen izin verin."); return; }
+      if (!w) { toast.error("Popup engelleyici aktif!"); return; }
+      w.document.open();
       w.document.write(html);
       w.document.close();
-      w.focus();
-      setTimeout(() => { w.print(); }, 800);
   };
 
   const kaydet = async () => {
