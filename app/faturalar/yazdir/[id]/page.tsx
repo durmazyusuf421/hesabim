@@ -69,12 +69,11 @@ export default function FaturaYazdirSayfasi() {
     const genelToplamHesapla = () => araToplamHesapla() + kdvToplamHesapla();
 
     return (
-        <div className="yazdir-container" style={{ position: "fixed", inset: 0, zIndex: 99999, background: "white", overflow: "auto" }}>
+        <div className="yazdir-container" style={{ position: "relative", minHeight: "100vh", background: "white", zIndex: 99999 }}>
             <style>{`
+                body { margin: 0 !important; }
                 @page { size: A4; margin: 15mm; }
                 @media print {
-                    .yazdir-container { position: static !important; overflow: visible !important; }
-                    body { margin: 0; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 }
             `}</style>
