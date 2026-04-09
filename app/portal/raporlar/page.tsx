@@ -277,7 +277,7 @@ export default function PortalRaporlar() {
     const pMasrafKategori = useMemo(() => {
         const map: Record<string, number> = {};
         pMasraflar.forEach(m => { map[m.masraf_kategorisi] = (map[m.masraf_kategorisi] || 0) + Number(m.tutar || 0) + Number(m.kdv_tutari || 0); });
-        return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b[1] - a[1]);
+        return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
     }, [pMasraflar]);
 
     // YEVMİYE

@@ -108,7 +108,7 @@ export default function AyarlarEkrani() {
       if (error) { toast.error("Güncelleme sırasında hata oluştu: " + error.message); }
       else {
           const { sifre: _s, ...sirketVerisi } = formData;
-          sirketGuncelle(sirketVerisi);
+          sirketGuncelle(sirketVerisi as any);
           toast.success("Firma bilgileriniz başarıyla güncellendi!");
       }
       setKaydediliyor(false);
