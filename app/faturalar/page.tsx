@@ -460,6 +460,13 @@ export default function FaturaMerkezi() {
       return () => document.removeEventListener("mousedown", handleClick);
   }, [acikAutoIndex]);
 
+  // Modal açıkken body scroll kilitle
+  useEffect(() => {
+      if (modalAcik) document.body.style.overflow = 'hidden';
+      else document.body.style.overflow = '';
+      return () => { document.body.style.overflow = ''; };
+  }, [modalAcik]);
+
   // HESAPLAMALAR (KDV DAHİL)
   const pf = (v: string | number) => parseFloat(String(v)) || 0;
   const araToplamHesapla = () => faturaKalemleri.reduce((acc, k) => acc + (pf(k.miktar) * pf(k.birim_fiyat)), 0);
@@ -1043,7 +1050,7 @@ export default function FaturaMerkezi() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto overflow-x-auto p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
                 {/* MASAÜSTÜ TABLO (md+) */}
                 <table className="tbl-kurumsal hidden md:table text-sm">
                     <thead>
