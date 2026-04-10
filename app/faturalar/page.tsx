@@ -41,6 +41,7 @@ export default function FaturaMerkezi() {
   const [aramaTerimi, setAramaTerimi] = useState("");
   const [yukleniyor, setYukleniyor] = useState(true);
   const [seciliFaturaId, setSeciliFaturaId] = useState<number | null>(null);
+  const [kaydediyor, setKaydediyor] = useState(false);
 
   // TOPLU İŞLEM
   const [seciliIdler, setSeciliIdler] = useState<Set<number>>(new Set());
@@ -328,7 +329,9 @@ export default function FaturaMerkezi() {
       setFirmalar(fData || []);
 
       const { data: faturaData } = await supabase.from("faturalar").select("*").eq("sirket_id", sId).order('tarih', { ascending: false }).order('id', { ascending: false });
-      setFaturalar(faturaData || []);
+      // Dedupe: aynı id tekrar gelirse bir kez göster
+      const benzersiz = Array.from(new Map((faturaData || []).map(f => [f.id, f])).values());
+      setFaturalar(benzersiz);
 
       setYukleniyor(false);
   }
@@ -697,9 +700,12 @@ export default function FaturaMerkezi() {
   };
 
   const kaydet = async () => {
+      if (kaydediyor) return; // çift tıklamaya karşı guard
       if (!faturaForm.cari_id) { toast.error("Lütfen Cari (Müşteri/Tedarikçi) seçin!"); return; }
       if (faturaKalemleri.length === 0 || !faturaKalemleri[0].urun_adi) { toast.error("Faturaya en az bir kalem eklemelisiniz!"); return; }
 
+      setKaydediyor(true);
+      try {
       const gToplam = genelToplamHesapla();
       let islemYapilacakId = seciliFaturaId;
 
@@ -865,6 +871,9 @@ export default function FaturaMerkezi() {
       }
       setModalAcik(false);
       if (aktifSirket) verileriGetir(aktifSirket.id);
+      } finally {
+          setKaydediyor(false);
+      }
   };
 
   const filtrelenmisFaturalar = faturalar.filter(f => {
@@ -877,7 +886,7 @@ export default function FaturaMerkezi() {
 
   return (
     <>
-      <main className="flex-1 flex flex-col h-full overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
+      <main className="flex-1 flex flex-col h-full overflow-hidden overflow-x-hidden w-full max-w-full" style={{ background: "var(--c-bg)" }}>
         {!hasAccess ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in zoom-in-95 duration-500" style={{ background: "#f8fafc" }}>
                 <div className="w-32 h-32 bg-red-50 text-red-500 flex items-center justify-center text-5xl mb-6 border-4 border-white"><i className="fas fa-lock"></i></div>
@@ -911,9 +920,9 @@ export default function FaturaMerkezi() {
                   </div>
                 )}
 
-                <div className="flex-1 overflow-auto relative print:hidden" style={{ background: "var(--c-bg)" }}>
+                <div className="flex-1 overflow-auto overflow-x-auto relative print:hidden" style={{ background: "var(--c-bg)" }}>
                     {/* MASAÜSTÜ TABLO */}
-                    <table className="tbl-kurumsal hidden md:table">
+                    <table className="tbl-kurumsal hidden md:table text-sm">
                         <thead>
                             <tr>
                                 <th className="w-10 text-center"><input type="checkbox" checked={filtrelenmisFaturalar.length > 0 && filtrelenmisFaturalar.every(f => seciliIdler.has(f.id))} onChange={() => tumunuSec(filtrelenmisFaturalar)} className="cursor-pointer accent-blue-600 w-4 h-4" /></th>
@@ -995,7 +1004,7 @@ export default function FaturaMerkezi() {
       {/* --- FATURA GİRİŞ MODALI --- */}
       {modalAcik && hasAccess && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 print:static print:bg-white p-0 md:p-4">
-          <div className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:max-w-5xl flex flex-col overflow-hidden print:border-none print:w-full" style={{ border: "1px solid var(--c-border)" }}>
+          <div className="bg-white w-full h-full md:h-auto md:max-h-[95vh] max-w-full md:max-w-4xl flex flex-col overflow-hidden text-sm md:text-base print:border-none print:w-full" style={{ border: "1px solid var(--c-border)" }}>
             <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
               <h3 className={`text-sm font-semibold flex items-center ${faturaTipi === 'GIDEN' ? 'text-[#1d4ed8]' : 'text-orange-800'}`}>
                   <i className={`fas ${faturaTipi === 'GIDEN' ? 'fa-file-export' : 'fa-file-import'} mr-2`}></i>
@@ -1034,9 +1043,9 @@ export default function FaturaMerkezi() {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
+            <div className="flex-1 overflow-auto overflow-x-auto p-2 print:p-0 print:bg-white" style={{ background: "#f8fafc" }}>
                 {/* MASAÜSTÜ TABLO (md+) */}
-                <table className="tbl-kurumsal hidden md:table">
+                <table className="tbl-kurumsal hidden md:table text-sm">
                     <thead>
                         <tr>
                             <th className="w-8 text-center print:hidden">#</th>
@@ -1174,8 +1183,8 @@ export default function FaturaMerkezi() {
                 {/* Kaydet butonu - en altta */}
                 {modalMod === "duzenle" && (
                     <div className="print:hidden">
-                        <button onClick={kaydet} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center sm:ml-auto`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
-                            <i className="fas fa-save mr-2"></i> Faturayı Kaydet
+                        <button onClick={kaydet} disabled={kaydediyor} className={`btn-primary w-full sm:w-auto px-6 py-3 sm:py-2 font-semibold text-xs uppercase tracking-widest flex items-center justify-center sm:ml-auto disabled:opacity-60 disabled:cursor-not-allowed`} style={faturaTipi === 'GELEN' ? { background: "#ea580c" } : undefined}>
+                            <i className={`fas ${kaydediyor ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i> {kaydediyor ? 'Kaydediliyor...' : 'Faturayı Kaydet'}
                         </button>
                     </div>
                 )}
