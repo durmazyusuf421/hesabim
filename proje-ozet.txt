@@ -1,7 +1,9 @@
 ==============================================================
   MUHASEBE-PRO - PROJE OZET DOKUMANI
-  Tarih: 2026-04-08
-  Versiyon: v2.9.19+
+  Tarih: 2026-04-11
+  Versiyon: v2.9.22
+  Domain: muhasebeniz.com
+  Deployment: Vercel Pro (aktif)
 ==============================================================
 
 1. SAYFA LİSTESİ (30 sayfa)
@@ -22,13 +24,13 @@ FINANS:
   /masraflar                - Masraf/Gider Takibi
 
 DEPO:
-  /stok                     - Stok Kartlari
+  /stok                     - Stok Kartlari (stok_kodu otomatik 00001 format)
   /stok/sayim               - Stok Sayimi
   /stok/toplu-fiyat         - Toplu Fiyat Guncelleme
   /stok-hareketleri         - Stok Hareketleri
 
 MUHASEBE:
-  /cari                     - Cari Kartlari (Musteri/Tedarikci)
+  /cari                     - Cari Kartlari (cari_kodu otomatik C-001 format)
   /ekstre                   - Cari Hareketler (Hesap Ekstresi)
   /yevmiye                  - Yevmiye Defteri
   /gelir-tablosu            - Gelir Tablosu
@@ -74,7 +76,7 @@ FATURA:
   fatura_sablon_kalemleri   - Fatura sablon kalemleri
 
 STOK:
-  urunler                   - Urun/stok kartlari
+  urunler                   - Urun/stok kartlari (stok_kodu ile)
   urun_kategorileri         - Urun kategorileri
   stok_hareketleri          - Stok giris/cikis hareketleri
   stok_sayimlari            - Stok sayim kayitlari
@@ -112,17 +114,40 @@ DIGER:
   satis_hedefleri           - Aylik satis hedefleri
 
 
-3. SON EKLENEN OZELLIKLER (v2.9.15 - v2.9.19+)
+3. SON EKLENEN OZELLIKLER (v2.9.15 - v2.9.22)
 ==============================================================
 
-v2.9.19+ (Commit edilmemis - Guncel):
+v2.9.22 (2026-04-11):
+  - Kapsamli denetim ve duzeltme pasi
+  - KRITIK: Yevmiye cari_hareketler sirket_id filtresi duzeltildi
+    * Eski: tum sirketlerin hareketleri cekiliyordu
+    * Yeni: firmalar.sahip_sirket_id uzerinden .in(firma_id) filtresi
+  - Global layout'a body overflow-x-hidden (tablet yatay kayma fix)
+  - Fatura yazdir beyaz sayfa sorunu: setTimeout yerine
+    document.readyState + load event ile guvenli print mekanizmasi
+  - Fatura modal 3 bolumlu yapida dogrulandi (shrink-0 / flex-1 / shrink-0)
+  - Modal acikken document.body.style.overflow = 'hidden' kilit
+  - Tablet zoom fix: modal max-w-5xl -> max-w-4xl
+  - Fatura duplicate fix: kaydediyor state guard + Map tabanli dedupe
+  - Yazdir butonu liste icinde (print ikonu) her satira eklendi
+
+v2.9.21:
+  - Stok: stok_kodu alani eklendi (00001 format, otomatik artan)
+  - Stok duplicate engeli, form + liste guncellendi
+
+v2.9.20:
+  - Cari: duplicate fix (tek sorgu)
+  - Cari_kodu otomatik C-001 format, duplicate kod engeli
+  - Fatura: tarih siralamasi, listeden yazdir butonu
+
+v2.9.19+ :
   - Yevmiye Defteri sayfasi (/yevmiye)
-    * Otomatik senkronizasyon: Fatura, tahsilat, masraf, kasa, banka → yevmiye
+    * Otomatik senkronizasyon: Fatura, tahsilat, masraf, kasa, banka -> yevmiye
     * Cift kayit (borc/alacak) sistemi
     * Hesap plani: 100 Kasa, 102 Bankalar, 120 Alicilar, 153 Ticari Mallar,
       320 Saticilar, 391 Hesaplanan KDV, 600 Yurt Ici Satislar, 770 Genel Yonetim Giderleri
   - Gelir Tablosu sayfasi (/gelir-tablosu)
-    * Brut Satislar → Net Satislar → Brut Kar → Faaliyet Kari → Net Kar/Zarar
+    * Brut Satislar -> Net Satislar -> Brut Kar -> Faaliyet Kari -> Net Kar/Zarar
     * Donem filtresi, Excel/PDF export
   - Mizan sayfasi (/mizan)
     * Hesap bazli borc/alacak toplami ve bakiye
@@ -130,12 +155,10 @@ v2.9.19+ (Commit edilmemis - Guncel):
   - Bilanco sayfasi (/bilanco)
     * Aktif (Varliklar) / Pasif (Kaynaklar) iki sutunlu gorunum
     * Denge kontrolu: Aktif = Pasif
-  - Fatura Sablon sistemi
-    * Sablon kaydet/yukle/sil
-    * Mevcut kalemleri degistir veya ekle secenegi
+  - Fatura Sablon sistemi (kaydet/yukle/sil)
   - Raporlar sayfasina 3 yeni sekme: Yevmiye, Mizan, Bilanco
   - Portal Raporlarina 4 yeni sekme: Masraf, Yevmiye, Mizan, Bilanco
-  - Sol menu sadelestirmesi (muhasebe sayfalari Raporlar altina tasindi)
+  - Sol menu sadelestirmesi
 
 v2.9.19:
   - Masraf/Gider takip sistemi (/masraflar)
@@ -162,7 +185,7 @@ v2.9.15:
   - Tahsilat mobil sadelestirme, tutar input gorunurluk
 
 
-4. EKSIK KALAN OZELLIKLER
+4. YOL HARITASI / EKSIK KALAN OZELLIKLER
 ==============================================================
 
 MUHASEBE:
@@ -172,12 +195,14 @@ MUHASEBE:
   - Amortisman hesaplama
   - KDV beyannamesi otomatik olusturma
   - e-Fatura / e-Arsiv entegrasyonu
+  - Kasa/banka islemleri icin dogru karsi hesap secimi
+    (su an 391 Hesaplanan KDV kullaniliyor, revize edilmeli)
 
 FINANS:
   - Otomatik banka mutabakati
   - Vade takibi ve hatirlatma
   - Taksitli odeme takibi
-  - Pos cihazi entegrasyonu
+  - POS cihazi entegrasyonu (fiziksel)
 
 STOK:
   - Barkod okuyucu ile stok sayim
@@ -193,17 +218,17 @@ RAPORLAR:
 GENEL:
   - Coklu dil destegi
   - Dark mode
-  - PWA (Progressive Web App) - offline calisma
-  - Veri yedekleme / geri yukleme
+  - PWA offline calisma (manifest var, SW gelismeli)
+  - Veri yedekleme / geri yukleme (panel uzerinden)
   - Kullanici aktivite loglari
-  - Rol bazli sayfa erisim kontrolu (middleware)
+  - Rol bazli middleware ile sayfa erisim kontrolu
+  - e-posta bildirim sistemi (SMTP)
 
 
 5. BILINEN HATALAR / SORUNLAR
 ==============================================================
 
-  - Yevmiye senkronizasyonu: cari_hareketler tablosunda sirket_id
-    filtresi yok (tum sirketlerin hareketlerini cekiyor)
+AKTIF:
   - Bilanco dengesi: Kasa girisi karsi hesap olarak 391 (Hesaplanan KDV)
     kullaniliyor, bu muhasebesel olarak yanlis olabilir
   - Fatura toplu PDF: Cok sayida fatura secildiginde (50+) tarayici
@@ -212,8 +237,17 @@ GENEL:
     alis faturasi verisi cekilemiyor (sadece satis var)
   - Gelir tablosu: Satis iadesi ve iskonto su an 0 olarak sabit,
     henuz iade/iskonto modulu yok
-  - Mizan/Bilanco: Yevmiye kayitlari senkronize edilmemisse
-    bos gorunuyor, kullaniciya uyari gosteriliyor ama yonlendirme yok
+  - Mizan/Bilanco: Yevmiye kayitlari senkronize edilmemisse bos
+    gorunuyor, kullaniciya uyari gosteriliyor ama yonlendirme yok
+
+DUZELTILDI (v2.9.22):
+  - [X] Yevmiye cari_hareketler sirket filtresi eksikligi
+  - [X] Fatura yazdir beyaz sayfa sorunu
+  - [X] Fatura modal tablet zoom / kaydirma sorunu
+  - [X] Fatura cift kayit (submit guard)
+  - [X] Global yatay kayma (body overflow-x-hidden)
+  - [X] Stok kodu duplicate engeli (v2.9.21)
+  - [X] Cari duplicate sorgu fix (v2.9.20)
 
 
 ==============================================================
@@ -229,7 +263,12 @@ RLS:            get_my_sirket_id() fonksiyonu ile satir bazli guvenlik
 Charts:         Recharts
 PDF:            jsPDF
 Excel:          xlsx (SheetJS)
+Odeme:          iyzico (API route + callback)
 Portal:         Cift portal: TOPTANCI (/) ve PERAKENDE (/portal)
-Deployment:     Vercel (tahmini)
+
+Deployment:     Vercel Pro (aktif plan)
+Domain:         muhasebeniz.com
+Version:        v2.9.22
+Son Guncelleme: 2026-04-11
 
 ==============================================================
