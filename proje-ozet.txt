@@ -224,6 +224,12 @@ GENEL:
   - Rol bazli middleware ile sayfa erisim kontrolu
   - e-posta bildirim sistemi (SMTP)
 
+GUVENLIK:
+  - Soft delete sistemi (silinen kayitlar geri alinabilsin - tum tablolar)
+  - API rate limiting (kayit/giris endpoint korumasi - middleware)
+  - iyzico callback firma dogrulamasi (gercekId'nin sahipSirketId'ye
+    ait oldugunu DB tarafinda dogrulamak)
+
 
 5. BILINEN HATALAR / SORUNLAR
 ==============================================================
