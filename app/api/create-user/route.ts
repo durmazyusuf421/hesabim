@@ -48,17 +48,23 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const email: string = body.email;
-    const password: string = body.password;
-    const sirket: SirketPayload | undefined = body.sirket;
+    // Defensive type guard — body'de beklenmeyen tipler gelirse ezilmesin
+    const email: string = typeof body.email === "string" ? body.email.trim() : "";
+    const password: string = typeof body.password === "string" ? body.password : "";
+    const sirket: SirketPayload | undefined = body.sirket && typeof body.sirket === "object" ? body.sirket : undefined;
 
     // --- Validasyon ---
-    if (!email || !password) {
-      return NextResponse.json({ error: "E-posta ve sifre zorunludur." }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: "E-posta zorunludur." }, { status: 400 });
+    }
+    if (!password) {
+      return NextResponse.json({ error: "Sifre zorunludur (API'ye bos geldi)." }, { status: 400 });
     }
     if (password.length < 8) {
       return NextResponse.json({ error: "Sifre en az 8 karakter olmalidir." }, { status: 400 });
     }
+    // Debug log — password.length'i yazar, gercek degeri yazmaz (guvenlik)
+    console.log(`[create-user] Istek alindi: email=${email}, password.length=${password.length}, sirket=${sirket ? "var" : "yok"}`);
 
     const emailLower = email.toLowerCase();
 
@@ -85,11 +91,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (userError || !userData.user) {
+      console.error("[create-user] Auth createUser hatasi:", userError);
       return NextResponse.json(
         { error: turkceHata(userError?.message || "Kullanici olusturulamadi.") },
         { status: 400 }
       );
     }
+    console.log(`[create-user] Auth user olusturuldu: ${userData.user.id}`);
 
     createdUserId = userData.user.id;
 
@@ -120,15 +128,20 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (sirketError || !sirketData) {
+        console.error("[create-user] sirketler insert hatasi:", sirketError);
         // ROLLBACK: auth user'i sil (orphan onleme)
         try {
           await supabaseAdmin.auth.admin.deleteUser(createdUserId);
-        } catch { /* ignore */ }
+          console.log("[create-user] Rollback: auth user silindi");
+        } catch (delErr) {
+          console.error("[create-user] Rollback hatasi:", delErr);
+        }
         return NextResponse.json(
           { error: turkceHata(sirketError?.message || "Sirket kaydi olusturulamadi.") },
           { status: 400 }
         );
       }
+      console.log(`[create-user] Sirket kaydi olusturuldu: ${sirketData.id}`);
 
       return NextResponse.json({
         user: { id: userData.user.id, email: userData.user.email },

@@ -271,19 +271,30 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                 const sonuc = await res.json();
 
                 if (!res.ok || sonuc.error) {
+                    console.error("[kayit] API hatasi:", sonuc);
                     toast.error("Kayit hatasi: " + (sonuc.error || "Bilinmeyen hata"));
                     setYukleniyor(false);
                     return;
                 }
 
                 // 2. Otomatik giris yap (email zaten onayli oldugu icin calisir)
+                // Defensive: sifre state'i hala dolu mu kontrol et
+                if (!sifre || sifre.length < 8) {
+                    console.error("[kayit] Sifre state kayboldu, otomatik giris yapilamadi");
+                    toast.success("Kayit basarili! Lutfen manuel giris yapin.");
+                    setIsKayit(false);
+                    setYukleniyor(false);
+                    return;
+                }
+
                 const { error: loginError } = await supabase.auth.signInWithPassword({
                     email: eposta.toLowerCase(),
                     password: sifre,
                 });
 
                 if (loginError) {
-                    toast.success("Kayit basarili! Lutfen giris yapin.");
+                    console.error("[kayit] signInWithPassword hatasi:", loginError);
+                    toast.error("Kayit basarili ancak otomatik giris basarisiz: " + loginError.message + ". Lutfen manuel giris yapin.");
                     setIsKayit(false);
                     setYukleniyor(false);
                     return;
