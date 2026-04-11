@@ -244,41 +244,62 @@ function AuthCard({ rol, baslik, altBaslik, tema, icon, kapat }: { rol: string, 
                 return;
             }
 
-            // 1. Supabase Auth ile kullanıcı oluştur
-            const { error: authError } = await supabase.auth.signUp({
-                email: eposta.toLowerCase(),
-                password: sifre,
-            });
+            // 1. API uzerinden auth user + sirket atomic olarak olustur
+            // (Admin API kullanir: email_confirm: true ile mail onayi atlanir)
+            try {
+                const res = await fetch("/api/create-user", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        email: eposta.toLowerCase(),
+                        password: sifre,
+                        sirket: {
+                            isletme_adi: isletmeAdi,
+                            unvan,
+                            telefon,
+                            rol,
+                            vergi_no: vergiNo,
+                            vergi_dairesi: vergiDairesi,
+                            il,
+                            ilce,
+                            adres,
+                            sektor: seciliSektorler.join(", "),
+                        },
+                    }),
+                });
 
-            if (authError) {
-                toast.error("Kayıt hatası: " + authError.message);
+                const sonuc = await res.json();
+
+                if (!res.ok || sonuc.error) {
+                    toast.error("Kayit hatasi: " + (sonuc.error || "Bilinmeyen hata"));
+                    setYukleniyor(false);
+                    return;
+                }
+
+                // 2. Otomatik giris yap (email zaten onayli oldugu icin calisir)
+                const { error: loginError } = await supabase.auth.signInWithPassword({
+                    email: eposta.toLowerCase(),
+                    password: sifre,
+                });
+
+                if (loginError) {
+                    toast.success("Kayit basarili! Lutfen giris yapin.");
+                    setIsKayit(false);
+                    setYukleniyor(false);
+                    return;
+                }
+
+                // 3. localStorage'a yaz ve yonlendir
+                localStorage.setItem("aktifSirket", JSON.stringify(sonuc.sirket));
+                localStorage.setItem("aktifKullanici", JSON.stringify({ ad_soyad: sonuc.sirket.isletme_adi, rol: "YONETICI" }));
+                toast.success("Kayit basarili! Yonlendiriliyorsunuz...");
+                window.location.href = rol === "TOPTANCI" ? "/dashboard" : "/portal";
+            } catch (err) {
+                const mesaj = err instanceof Error ? err.message : String(err);
+                toast.error("Baglanti hatasi: " + mesaj);
                 setYukleniyor(false);
                 return;
             }
-
-            // 2. Şirket kaydını oluştur
-            const yeniSirket = {
-                eposta: eposta.toLowerCase(),
-                isletme_adi: isletmeAdi, unvan, telefon, rol,
-                vergi_no: vergiNo, vergi_dairesi: vergiDairesi, il, ilce, adres,
-                sektor: seciliSektorler.join(", ")
-            };
-
-            const { data, error } = await supabase.from("sirketler").insert([yeniSirket]).select().single();
-            if (error) { toast.error("Şirket kaydı hatası: E-posta adresi kullanılıyor olabilir."); setYukleniyor(false); return; }
-
-            // 3. Otomatik giriş yap
-            const { error: loginError } = await supabase.auth.signInWithPassword({ email: eposta.toLowerCase(), password: sifre });
-            if (loginError) {
-                toast.success("Kayıt başarılı! Lütfen giriş yapın.");
-                setIsKayit(false);
-                setYukleniyor(false);
-                return;
-            }
-
-            localStorage.setItem("aktifSirket", JSON.stringify(data));
-            localStorage.setItem("aktifKullanici", JSON.stringify({ ad_soyad: "Sistem Yöneticisi", rol: "YONETICI" }));
-            window.location.href = rol === "TOPTANCI" ? "/dashboard" : "/portal";
 
         } else {
             // === GİRİŞ İŞLEMİ (Supabase Auth + Veritabanı Rol Eşleşme) ===
