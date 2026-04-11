@@ -63,8 +63,6 @@ export async function POST(req: NextRequest) {
     if (password.length < 8) {
       return NextResponse.json({ error: "Sifre en az 8 karakter olmalidir." }, { status: 400 });
     }
-    // Debug log — password.length'i yazar, gercek degeri yazmaz (guvenlik)
-    console.log(`[create-user] Istek alindi: email=${email}, password.length=${password.length}, sirket=${sirket ? "var" : "yok"}`);
 
     const emailLower = email.toLowerCase();
 
@@ -91,13 +89,11 @@ export async function POST(req: NextRequest) {
     });
 
     if (userError || !userData.user) {
-      console.error("[create-user] Auth createUser hatasi:", userError);
       return NextResponse.json(
         { error: turkceHata(userError?.message || "Kullanici olusturulamadi.") },
         { status: 400 }
       );
     }
-    console.log(`[create-user] Auth user olusturuldu: ${userData.user.id}`);
 
     createdUserId = userData.user.id;
 
@@ -128,20 +124,15 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (sirketError || !sirketData) {
-        console.error("[create-user] sirketler insert hatasi:", sirketError);
         // ROLLBACK: auth user'i sil (orphan onleme)
         try {
           await supabaseAdmin.auth.admin.deleteUser(createdUserId);
-          console.log("[create-user] Rollback: auth user silindi");
-        } catch (delErr) {
-          console.error("[create-user] Rollback hatasi:", delErr);
-        }
+        } catch { /* ignore */ }
         return NextResponse.json(
           { error: turkceHata(sirketError?.message || "Sirket kaydi olusturulamadi.") },
           { status: 400 }
         );
       }
-      console.log(`[create-user] Sirket kaydi olusturuldu: ${sirketData.id}`);
 
       return NextResponse.json({
         user: { id: userData.user.id, email: userData.user.email },

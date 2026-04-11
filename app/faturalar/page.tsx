@@ -746,6 +746,7 @@ export default function FaturaMerkezi() {
           const alacak = faturaTipi === "GELEN" ? gToplam : 0;
 
           await supabase.from("cari_hareketler").insert([{
+              sahip_sirket_id: aktifSirket?.id,
               firma_id: Number(faturaForm.cari_id),
               tarih: faturaForm.tarih,
               evrak_no: faturaForm.fatura_no,

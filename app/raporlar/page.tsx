@@ -98,32 +98,51 @@ export default function RaporlarSayfasi() {
             const sirketId = aktifSirket.id;
             const { baslangic, bitis } = donemTarih(donem, ozelBaslangic, ozelBitis);
 
-            const [sRes, hRes, fRes, tumRes, bhRes, csRes, skRes, tumBhRes, tumHRes, tumSkRes] = await Promise.all([
+            // 1. Ana sorgular (sirket scope icinde olanlar)
+            const [sRes, fRes, tumRes, bhRes, csRes, tumBhRes] = await Promise.all([
                 supabase.from("siparisler").select("id, toplam_tutar, durum, created_at, alici_firma_id").eq("satici_sirket_id", sirketId).gte("created_at", baslangic).lte("created_at", bitis + "T23:59:59"),
-                supabase.from("cari_hareketler").select("id, borc, alacak, tarih").gte("tarih", baslangic).lte("tarih", bitis + "T23:59:59"),
                 supabase.from("firmalar").select("id, unvan, bakiye").eq("sahip_sirket_id", sirketId),
                 supabase.from("siparisler").select("id, toplam_tutar, durum, created_at, alici_firma_id").eq("satici_sirket_id", sirketId).order("created_at", { ascending: false }),
                 supabase.from("banka_hareketleri").select("id, islem_tipi, tutar, tarih").eq("sirket_id", sirketId).gte("tarih", baslangic).lte("tarih", bitis),
                 supabase.from("cek_senetler").select("id, yon, tutar, durum, vade_tarihi").eq("sirket_id", sirketId).gte("vade_tarihi", baslangic).lte("vade_tarihi", bitis),
-                supabase.from("siparis_kalemleri").select("id, alis_fiyati, miktar, siparis_id, kdv_orani, birim_fiyat"),
                 supabase.from("banka_hareketleri").select("id, islem_tipi, tutar, tarih").eq("sirket_id", sirketId).order("tarih", { ascending: false }),
-                supabase.from("cari_hareketler").select("id, borc, alacak, tarih").order("tarih", { ascending: false }),
-                supabase.from("siparis_kalemleri").select("id, alis_fiyati, miktar, siparis_id, kdv_orani, birim_fiyat"),
             ]);
 
             setSiparisler(sRes.data || []);
             setTumSiparisler(tumRes.data || []);
-            setHareketler(hRes.data || []);
             setFirmalar(fRes.data || []);
             setBankaHareketleri(bhRes.data || []);
             setCekSenetler(csRes.data || []);
             setTumBankaHareketleri(tumBhRes.data || []);
-            setTumCariHareketler(tumHRes.data || []);
-            // siparis_kalemleri: sadece bu dönemdeki siparişlerle eşleşenler
-            const donemSiparisIds = new Set((sRes.data || []).map(s => s.id));
-            setSiparisKalemleri((skRes.data || []).filter(k => donemSiparisIds.has(k.siparis_id)));
-            const tumSiparisIds = new Set((tumRes.data || []).map(s => s.id));
-            setTumSiparisKalemleri((tumSkRes.data || []).filter(k => tumSiparisIds.has(k.siparis_id)));
+
+            // 2. cari_hareketler: firma_id uzerinden scope (hem eski hem yeni kayitlari yakalar)
+            const firmaIdList = (fRes.data || []).map(f => f.id);
+            if (firmaIdList.length > 0) {
+                const [hRes, tumHRes] = await Promise.all([
+                    supabase.from("cari_hareketler").select("id, borc, alacak, tarih").in("firma_id", firmaIdList).gte("tarih", baslangic).lte("tarih", bitis + "T23:59:59"),
+                    supabase.from("cari_hareketler").select("id, borc, alacak, tarih").in("firma_id", firmaIdList).order("tarih", { ascending: false }),
+                ]);
+                setHareketler(hRes.data || []);
+                setTumCariHareketler(tumHRes.data || []);
+            } else {
+                setHareketler([]);
+                setTumCariHareketler([]);
+            }
+
+            // 3. siparis_kalemleri: siparis_id uzerinden scope (sirketin kendi siparisleri)
+            const tumSiparisIds = (tumRes.data || []).map(s => s.id);
+            if (tumSiparisIds.length > 0) {
+                const { data: tumKalemler } = await supabase.from("siparis_kalemleri")
+                    .select("id, alis_fiyati, miktar, siparis_id, kdv_orani, birim_fiyat")
+                    .in("siparis_id", tumSiparisIds);
+                const donemSiparisIds = new Set((sRes.data || []).map(s => s.id));
+                const tumSiparisIdsSet = new Set(tumSiparisIds);
+                setSiparisKalemleri((tumKalemler || []).filter(k => donemSiparisIds.has(k.siparis_id)));
+                setTumSiparisKalemleri((tumKalemler || []).filter(k => tumSiparisIdsSet.has(k.siparis_id)));
+            } else {
+                setSiparisKalemleri([]);
+                setTumSiparisKalemleri([]);
+            }
 
             // Masraf verileri
             const { data: masrafData } = await supabase.from("masraflar").select("id, masraf_kategorisi, tutar, kdv_tutari, tarih").eq("sirket_id", sirketId).order("tarih", { ascending: false });
