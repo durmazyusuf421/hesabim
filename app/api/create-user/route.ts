@@ -94,6 +94,9 @@ export async function POST(req: NextRequest) {
     createdUserId = userData.user.id;
 
     // --- 2. Sirket kaydi (payload varsa) ---
+    // NOT: "sifre" kolonu kasitli olarak gonderilmiyor. Kimlik dogrulama
+    // artik Supabase Auth ile yapiliyor. sirketler.sifre kolonu nullable
+    // olmali (add-sifre-nullable.sql ile DROP NOT NULL yapildi).
     if (sirket) {
       const yeniSirket = {
         eposta: emailLower,
@@ -107,6 +110,7 @@ export async function POST(req: NextRequest) {
         ilce: sirket.ilce || null,
         adres: sirket.adres || null,
         sektor: sirket.sektor || null,
+        sifre: null, // Eski kolon - Supabase Auth'a tasindi
       };
 
       const { data: sirketData, error: sirketError } = await supabaseAdmin
