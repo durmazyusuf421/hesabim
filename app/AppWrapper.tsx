@@ -109,7 +109,8 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
     useEffect(() => {
         setIsMounted(true);
-        const timer = setTimeout(() => { setAuthTimeout(true); }, 8000);
+        // Auth cozum fallback suresi (normalde <1s, bu sadece guvenlik agi)
+        const timer = setTimeout(() => { setAuthTimeout(true); }, 1500);
         const handleMenuOpen = () => setMobilMenuAcik(true);
         window.addEventListener('openMobilMenu', handleMenuOpen);
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -264,7 +265,10 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
 
     useEffect(() => {
         if (isLoginPage) return;
-        if (authTimeout && !sirketId && !authYukleniyor) { window.location.href = "/login"; }
+        // Auth cozuldu ve kullanici yok -> anlik redirect (timeout beklemeden)
+        if (!authYukleniyor && !sirketId) { window.location.href = "/login"; return; }
+        // Guvenlik agi: auth uzun surerse de redirect et
+        if (authTimeout && !sirketId) { window.location.href = "/login"; }
     }, [authTimeout, sirketId, authYukleniyor, isLoginPage]);
 
     const menuYetkiliMi = (item: MenuItem): boolean => {
@@ -280,10 +284,30 @@ export default function AppWrapper({ children }: { children: React.ReactNode }) 
     if (isLoginPage) return <>{children}</>;
 
     if (!isMounted || authYukleniyor || !aktifSirket) {
+        // Skeleton UI — sidebar + header placeholder (spinner yerine yapisal)
         return (
-            <div className="h-screen h-[100dvh] flex flex-col items-center justify-center" style={{ background: "var(--c-bg)" }}>
-                <div className="w-8 h-8 border-2 border-[#0f172a] border-t-transparent animate-spin mb-4" />
-                <span className="text-[12px] font-semibold text-[#64748b] tracking-widest uppercase">Sistem Doğrulanıyor</span>
+            <div className="h-screen h-[100dvh] flex overflow-hidden w-full" style={{ background: "var(--c-bg)" }}>
+                {/* Sidebar skeleton */}
+                <div className="hidden md:flex w-[var(--sidebar-w)] shrink-0 flex-col" style={{ background: "var(--c-sidebar)" }}>
+                    <div className="h-16 border-b border-white/5 flex items-center px-4">
+                        <div className="w-32 h-4 bg-white/10 animate-pulse" />
+                    </div>
+                    <div className="flex-1 p-3 space-y-2">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} className="h-7 bg-white/5 animate-pulse" />
+                        ))}
+                    </div>
+                </div>
+                {/* Main skeleton */}
+                <div className="flex-1 flex flex-col">
+                    <div className="h-14 border-b flex items-center justify-between px-4" style={{ borderColor: "var(--c-border)" }}>
+                        <div className="w-40 h-4 bg-slate-200 animate-pulse" />
+                        <div className="w-24 h-4 bg-slate-200 animate-pulse" />
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                        <span className="text-[10px] font-semibold text-[#94a3b8] tracking-widest uppercase">Yukleniyor</span>
+                    </div>
+                </div>
             </div>
         );
     }

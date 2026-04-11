@@ -99,7 +99,8 @@ export function useAuth(): AuthState {
       // 2. localStorage yoksa Supabase Auth dene
       try {
         const sessionPromise = supabase.auth.getSession();
-        const timeout = new Promise<null>(r => setTimeout(() => r(null), 6000));
+        // Supabase getSession() normalde <500ms, 2s guvenli ust sinir
+        const timeout = new Promise<null>(r => setTimeout(() => r(null), 2000));
         const sonuc = await Promise.race([sessionPromise, timeout]);
 
         if (sonuc && 'data' in sonuc) {
@@ -137,7 +138,8 @@ export function useAuth(): AuthState {
 
     authBaslat();
 
-    // Auth state değişikliği
+    // Auth state dinleyici — anlik session degisiklikleri icin
+    // INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
@@ -150,17 +152,7 @@ export function useAuth(): AuthState {
       }
 
       if (event === "TOKEN_REFRESHED" && !session) {
-        // Token yenilenemedi - geçersiz refresh token
-        localStorage.removeItem("aktifSirket");
-        localStorage.removeItem("aktifKullanici");
-        localStorage.removeItem("_lastActivity");
-        window.location.href = "/login";
-      }
-    });
-
-    // Geçersiz refresh token kontrolü
-    supabase.auth.getSession().then(({ error }) => {
-      if (error?.message?.includes("Invalid Refresh Token")) {
+        // Token yenilenemedi - gecersiz refresh token
         localStorage.removeItem("aktifSirket");
         localStorage.removeItem("aktifKullanici");
         localStorage.removeItem("_lastActivity");
