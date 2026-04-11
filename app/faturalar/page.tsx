@@ -610,7 +610,10 @@ export default function FaturaMerkezi() {
       w.document.write(html);
       w.document.close();
       w.focus();
-      setTimeout(() => { w.print(); }, 1000);
+      // Sayfa tam yüklendiğinde yazdır (beyaz sayfa sorununa karşı)
+      const yazdirYapilsin = () => { try { w.print(); } catch { /* */ } };
+      if (w.document.readyState === "complete") yazdirYapilsin();
+      else w.addEventListener("load", yazdirYapilsin);
   };
 
   const listedenYazdir = async (f: FaturaRecord) => {
@@ -703,7 +706,10 @@ export default function FaturaMerkezi() {
       w.document.write(html);
       w.document.close();
       w.focus();
-      setTimeout(() => { w.print(); }, 1000);
+      // Sayfa tam yüklendiğinde yazdır
+      const yazdirYapilsin = () => { try { w.print(); } catch { /* */ } };
+      if (w.document.readyState === "complete") yazdirYapilsin();
+      else w.addEventListener("load", yazdirYapilsin);
   };
 
   const kaydet = async () => {

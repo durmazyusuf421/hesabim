@@ -119,8 +119,15 @@ export default function YevmiyeDefteri() {
             });
 
             // 2. TAHSİLAT / ÖDEME (cari_hareketler)
-            const { data: hareketler } = await supabase.from("cari_hareketler")
-                .select("id, tarih, evrak_no, aciklama, borc, alacak");
+            // ÖNEMLİ: cari_hareketler tablosunda sirket_id yok, firma_id üzerinden scope edilmeli
+            const { data: sirketFirmalari } = await supabase.from("firmalar")
+                .select("id").eq("sahip_sirket_id", sId);
+            const firmaIdListesi = (sirketFirmalari || []).map(f => f.id);
+            const { data: hareketler } = firmaIdListesi.length > 0
+                ? await supabase.from("cari_hareketler")
+                    .select("id, tarih, evrak_no, aciklama, borc, alacak")
+                    .in("firma_id", firmaIdListesi)
+                : { data: [] };
             (hareketler || []).forEach(h => {
                 if (mevcutSet.has(`TAHSILAT_${h.id}`)) return;
                 const borcTutar = Number(h.borc || 0);
