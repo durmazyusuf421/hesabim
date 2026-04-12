@@ -272,8 +272,8 @@ export default function FaturaMerkezi() {
     const { data: kalemler } = await supabase.from("fatura_sablon_kalemleri").select("*").eq("sablon_id", sablonId);
     if (!kalemler || kalemler.length === 0) { toast.error("Sablonda kalem bulunamadi!"); return; }
     const yeniKalemler: FaturaKalemi[] = kalemler.map(k => ({
-      urun_adi: k.urun_adi || "", miktar: k.miktar || 1, birim: k.birim || "Adet",
-      birim_fiyat: k.birim_fiyat || 0, kdv_orani: k.kdv_orani || 20,
+      urun_adi: k.urun_adi || "", miktar: String(k.miktar || "1"), birim: k.birim || "Adet",
+      birim_fiyat: String(k.birim_fiyat || ""), kdv_orani: k.kdv_orani || 20,
     }));
     // Mevcut kalemleri boşsa değiştir, doluysa ekle
     const mevcutDolu = faturaKalemleri.some(k => k.urun_adi.trim());
@@ -353,7 +353,7 @@ export default function FaturaMerkezi() {
       setSeciliFaturaId(null);
       const yeniNo = await faturaNoUret(aktifSirket!.id);
       setFaturaForm({ fatura_no: yeniNo, tarih: new Date().toISOString().split('T')[0], cari_id: "" });
-      setFaturaKalemleri([{ urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
+      setFaturaKalemleri([{ urun_adi: "", miktar: "1", birim: "Adet", birim_fiyat: "", kdv_orani: 20 }]);
       setModalAcik(true);
   };
 
@@ -369,7 +369,8 @@ export default function FaturaMerkezi() {
       setFaturaForm({ fatura_no: fatura.fatura_no, tarih: fatura.tarih, cari_id: fatura.cari_id?.toString() || "" });
 
       const { data: kalemData } = await supabase.from("fatura_detaylari").select("*").eq("fatura_id", fatura.id);
-      setFaturaKalemleri(kalemData || []);
+      // DB'den gelen number'lari string'e cevir (input 0-silme sorunu onlenir)
+      setFaturaKalemleri((kalemData || []).map(k => ({ ...k, miktar: String(k.miktar ?? ""), birim_fiyat: String(k.birim_fiyat ?? "") })));
       setModalAcik(true);
   };
 
@@ -415,7 +416,7 @@ export default function FaturaMerkezi() {
       });
   };
 
-  const satirEkle = () => setFaturaKalemleri([...faturaKalemleri, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]);
+  const satirEkle = () => setFaturaKalemleri([...faturaKalemleri, { urun_adi: "", miktar: "1", birim: "Adet", birim_fiyat: "", kdv_orani: 20 }]);
   const satirGuncelle = (index: number, alan: keyof FaturaKalemi, deger: string | number) => {
       const yeni = [...faturaKalemleri];
       yeni[index] = { ...yeni[index], [alan]: deger };
@@ -443,7 +444,7 @@ export default function FaturaMerkezi() {
 
   const autoUrunSec = (index: number, urun: StokUrun) => {
       const yeni = [...faturaKalemleri];
-      yeni[index] = { ...yeni[index], urun_adi: urun.urun_adi, birim: urun.birim, birim_fiyat: urun.satis_fiyati, kdv_orani: urun.kdv_orani };
+      yeni[index] = { ...yeni[index], urun_adi: urun.urun_adi, birim: urun.birim, birim_fiyat: String(urun.satis_fiyati), kdv_orani: urun.kdv_orani };
       setFaturaKalemleri(yeni);
       setAcikAutoIndex(-1);
       setAutoSonuclar([]);
@@ -1098,7 +1099,7 @@ export default function FaturaMerkezi() {
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`}>{modalMod === "goruntule" ? item.miktar : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.miktar} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-1 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" value={item.birim_fiyat} onFocus={(e) => e.target.select()} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: 1, birim: "Adet", birim_fiyat: 0, kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: "1", birim: "Adet", birim_fiyat: "", kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                     {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
                                 </tr>
