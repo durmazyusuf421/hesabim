@@ -43,6 +43,13 @@ export default function FaturaMerkezi() {
   const [seciliFaturaId, setSeciliFaturaId] = useState<number | null>(null);
   const [kaydediyor, setKaydediyor] = useState(false);
 
+  // FİYAT GÜNCELLEME MODALI
+  const [fiyatModal, setFiyatModal] = useState<{
+    acik: boolean; urunId: number; urunAdi: string; yeniAlis: number;
+    eskiAlis: number; eskiSatis: number; karMarji: string; yeniSatis: string;
+    farkYuzde: string; yon: string;
+  } | null>(null);
+
   // TOPLU İŞLEM
   const [seciliIdler, setSeciliIdler] = useState<Set<number>>(new Set());
 
@@ -471,33 +478,17 @@ export default function FaturaMerkezi() {
       if (yuzde < 1) { console.log("[alisFiyatKontrol] %1 altinda, atla"); return; } // TEST: esik %1 (production'da %3 yapilacak)
       const yon = yeniFiyat > eskiFiyat ? "artis" : "dusus";
 
-      // Kar marji hesapla — satis fiyatini da orantili guncelle
-      // Mevcut satis fiyatini DB'den cek
+      // Mevcut satis fiyatini DB'den cek ve fiyat modal'ini ac
       supabase.from("urunler").select("satis_fiyati").eq("id", urunId).single().then(({ data: urunData }) => {
           const eskiSatis = Number(urunData?.satis_fiyati) || 0;
-          const karMarji = eskiSatis > 0 && eskiFiyat > 0 ? (eskiSatis - eskiFiyat) / eskiFiyat : 0;
-          const yeniSatis = karMarji > 0 ? Math.round(yeniFiyat * (1 + karMarji) * 100) / 100 : 0;
-          const marjYuzde = (karMarji * 100).toFixed(1);
-
-          const satisNotu = yeniSatis > 0
-              ? `\nSatis fiyati da %${marjYuzde} kar marji korunarak ${fmt(yeniSatis)} TL olarak guncellenecek.`
-              : "";
-
-          onayla({
-              baslik: "Alis Fiyati Degismis",
-              mesaj: `"${urunAdi}" urunun alis fiyati degismis!\nKayitli fiyat: ${fmt(eskiFiyat)} TL → Yeni fiyat: ${fmt(yeniFiyat)} TL (%${yuzde.toFixed(1)} ${yon})${satisNotu}`,
-              altMesaj: "Stok kartindaki fiyatlari guncellemek ister misiniz?",
-              onayMetni: "Evet, Guncelle",
-              tehlikeli: false,
-              onOnayla: async () => {
-                  const guncelVeri: Record<string, number> = { alis_fiyati: yeniFiyat };
-                  if (yeniSatis > 0) guncelVeri.satis_fiyati = yeniSatis;
-                  await supabase.from("urunler").update(guncelVeri).eq("id", urunId);
-                  const mesaj = yeniSatis > 0
-                      ? `"${urunAdi}" alis: ${fmt(yeniFiyat)} TL, satis: ${fmt(yeniSatis)} TL olarak guncellendi.`
-                      : `"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak guncellendi.`;
-                  toast.success(mesaj);
-              },
+          const karMarji = eskiSatis > 0 && eskiFiyat > 0 ? ((eskiSatis - eskiFiyat) / eskiFiyat) * 100 : 0;
+          const yeniSatis = karMarji > 0 ? Math.round(yeniFiyat * (1 + karMarji / 100) * 100) / 100 : 0;
+          setFiyatModal({
+              acik: true, urunId, urunAdi, yeniAlis: yeniFiyat,
+              eskiAlis: eskiFiyat, eskiSatis,
+              karMarji: karMarji > 0 ? karMarji.toFixed(1) : "",
+              yeniSatis: yeniSatis > 0 ? String(yeniSatis) : "",
+              farkYuzde: yuzde.toFixed(1), yon,
           });
       });
   };
@@ -1320,6 +1311,76 @@ export default function FaturaMerkezi() {
       )}
 
       <OnayModal />
+
+      {/* FİYAT GÜNCELLEME MODALI */}
+      {fiyatModal?.acik && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white w-full max-w-md flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
+            <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
+              <h3 className="text-sm font-semibold text-orange-800 flex items-center"><i className="fas fa-exchange-alt mr-2"></i>Alis Fiyati Degismis</h3>
+              <button onClick={() => setFiyatModal(null)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* Bilgi */}
+              <div className="bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 font-bold">
+                <p>&quot;{fiyatModal.urunAdi}&quot; alis fiyati degismis!</p>
+                <p className="mt-1">Kayitli: {fiyatModal.eskiAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL → Yeni: {fiyatModal.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL ({fiyatModal.farkYuzde}% {fiyatModal.yon})</p>
+              </div>
+
+              {/* Kar Marji + Satis Fiyati */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Kar Marji (%)</label>
+                  <input type="text" inputMode="decimal" value={fiyatModal.karMarji} placeholder="0"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(",", ".");
+                      if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                      const marj = Number(v) || 0;
+                      const yeniS = marj > 0 ? Math.round(fiyatModal.yeniAlis * (1 + marj / 100) * 100) / 100 : 0;
+                      setFiyatModal({ ...fiyatModal, karMarji: v, yeniSatis: yeniS > 0 ? String(yeniS) : "" });
+                    }}
+                    className="input-kurumsal w-full text-center font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Yeni Satis Fiyati (TL)</label>
+                  <input type="text" inputMode="decimal" value={fiyatModal.yeniSatis} placeholder="0.00"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(",", ".");
+                      if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                      const satis = Number(v) || 0;
+                      const marj = satis > 0 && fiyatModal.yeniAlis > 0 ? ((satis - fiyatModal.yeniAlis) / fiyatModal.yeniAlis) * 100 : 0;
+                      setFiyatModal({ ...fiyatModal, yeniSatis: v, karMarji: marj > 0 ? marj.toFixed(1) : "0" });
+                    }}
+                    className="input-kurumsal w-full text-right font-bold text-[#1d4ed8]" />
+                </div>
+              </div>
+
+              {/* Ozet */}
+              <div className="bg-slate-50 p-3 text-xs font-bold text-slate-600 flex items-center justify-between" style={{ border: "1px solid var(--c-border)" }}>
+                <span>Alis: {fiyatModal.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                <span className="text-[#1d4ed8]">Satis: {Number(fiyatModal.yeniSatis || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                <span className="text-emerald-600">Kar: {(Number(fiyatModal.yeniSatis || 0) - fiyatModal.yeniAlis).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL ({fiyatModal.karMarji || "0"}%)</span>
+              </div>
+
+              {/* Butonlar */}
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  const guncel: Record<string, number> = { alis_fiyati: fiyatModal.yeniAlis };
+                  const satis = Number(fiyatModal.yeniSatis) || 0;
+                  if (satis > 0) guncel.satis_fiyati = satis;
+                  await supabase.from("urunler").update(guncel).eq("id", fiyatModal.urunId);
+                  const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+                  toast.success(satis > 0
+                    ? `"${fiyatModal.urunAdi}" alis: ${fmt(fiyatModal.yeniAlis)} TL, satis: ${fmt(satis)} TL olarak guncellendi.`
+                    : `"${fiyatModal.urunAdi}" alis fiyati ${fmt(fiyatModal.yeniAlis)} TL olarak guncellendi.`);
+                  setFiyatModal(null);
+                }} className="flex-1 btn-primary py-2.5 text-xs font-bold uppercase tracking-widest"><i className="fas fa-check mr-1"></i> Guncelle</button>
+                <button onClick={() => setFiyatModal(null)} className="flex-1 btn-secondary py-2.5 text-xs font-bold uppercase tracking-widest">Vazgec</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
