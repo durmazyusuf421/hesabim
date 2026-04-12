@@ -8,7 +8,7 @@ import { useBirimler } from "@/app/lib/useBirimler";
 import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 interface FaturaKalemi { urun_adi: string; miktar: string | number; birim: string; birim_fiyat: string | number; kdv_orani: number; }
-interface StokUrun { id: number; urun_adi: string; birim: string; satis_fiyati: number; kdv_orani: number; }
+interface StokUrun { id: number; urun_adi: string; birim: string; satis_fiyati: number; alis_fiyati: number; kdv_orani: number; }
 interface FaturaFormState { fatura_no: string; tarih: string; cari_id: string; }
 interface FaturaRecord {
   id: number;
@@ -432,7 +432,7 @@ export default function FaturaMerkezi() {
       setAcikAutoIndex(index);
       autoTimerRef.current = setTimeout(async () => {
           const { data } = await supabase.from("urunler")
-              .select("id, urun_adi, birim, satis_fiyati, kdv_orani")
+              .select("id, urun_adi, birim, satis_fiyati, alis_fiyati, kdv_orani")
               .eq("sahip_sirket_id", aktifSirket.id)
               .neq("aktif", false)
               .ilike("urun_adi", `%${value.trim()}%`)
@@ -442,9 +442,32 @@ export default function FaturaMerkezi() {
       }, 300);
   };
 
+  // ALIŞ FATURASI FİYAT FARKI KONTROLÜ
+  const alisFiyatKontrol = (urunId: number, urunAdi: string, eskiFiyat: number, yeniFiyat: number) => {
+      if (eskiFiyat <= 0 || yeniFiyat <= 0) return;
+      const fark = Math.abs(yeniFiyat - eskiFiyat);
+      const yuzde = (fark / eskiFiyat) * 100;
+      if (yuzde < 3) return; // %3'ten az fark — uyarı verme
+      const yon = yeniFiyat > eskiFiyat ? "artis" : "dusus";
+      const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      onayla({
+          baslik: "Alis Fiyati Degismis",
+          mesaj: `"${urunAdi}" urunun alis fiyati degismis!\nKayitli fiyat: ${fmt(eskiFiyat)} TL → Yeni fiyat: ${fmt(yeniFiyat)} TL (%${yuzde.toFixed(1)} ${yon})`,
+          altMesaj: "Stok kartindaki alis fiyatini guncellemek ister misiniz?",
+          onayMetni: "Evet, Guncelle",
+          tehlikeli: false,
+          onOnayla: async () => {
+              await supabase.from("urunler").update({ alis_fiyati: yeniFiyat }).eq("id", urunId);
+              toast.success(`"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak guncellendi.`);
+          },
+      });
+  };
+
   const autoUrunSec = (index: number, urun: StokUrun) => {
       const yeni = [...faturaKalemleri];
-      yeni[index] = { ...yeni[index], urun_adi: urun.urun_adi, birim: urun.birim, birim_fiyat: String(urun.satis_fiyati), kdv_orani: urun.kdv_orani };
+      // Alis faturasinda satis_fiyati yerine alis_fiyati kullan
+      const fiyat = faturaTipi === "GELEN" ? urun.alis_fiyati : urun.satis_fiyati;
+      yeni[index] = { ...yeni[index], urun_adi: urun.urun_adi, birim: urun.birim, birim_fiyat: String(fiyat || ""), kdv_orani: urun.kdv_orani };
       setFaturaKalemleri(yeni);
       setAcikAutoIndex(-1);
       setAutoSonuclar([]);
@@ -1098,7 +1121,7 @@ export default function FaturaMerkezi() {
                                     </td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? item.miktar : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0" value={item.miktar} onFocus={(e) => { satirGuncelle(index, "miktar", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "miktar", "1"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-1 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); else if (faturaTipi === "GELEN" && item.urun_adi) { const matchUrun = autoSonuclar.find(u => u.urun_adi === item.urun_adi) || null; if (matchUrun) alisFiyatKontrol(matchUrun.id, matchUrun.urun_adi, matchUrun.alis_fiyati, pf(e.target.value)); else { supabase.from("urunler").select("id, alis_fiyati").eq("sahip_sirket_id", aktifSirket?.id || 0).eq("urun_adi", item.urun_adi).limit(1).single().then(({ data: u }) => { if (u) alisFiyatKontrol(u.id, item.urun_adi, Number(u.alis_fiyati), pf(e.target.value)); }); } }}} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: "", birim: "Adet", birim_fiyat: "", kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                     {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
@@ -1158,7 +1181,7 @@ export default function FaturaMerkezi() {
                                             </div>
                                             <div style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
                                                 <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Birim Fiyat</label>
-                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="input-kurumsal w-full text-right text-[12px] font-bold text-[#1d4ed8]" />
+                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); else if (faturaTipi === "GELEN" && item.urun_adi) { supabase.from("urunler").select("id, alis_fiyati").eq("sahip_sirket_id", aktifSirket?.id || 0).eq("urun_adi", item.urun_adi).limit(1).single().then(({ data: u }) => { if (u) alisFiyatKontrol(u.id, item.urun_adi, Number(u.alis_fiyati), pf(e.target.value)); }); }}} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="input-kurumsal w-full text-right text-[12px] font-bold text-[#1d4ed8]" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">KDV %</label>
