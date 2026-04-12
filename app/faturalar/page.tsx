@@ -43,11 +43,15 @@ export default function FaturaMerkezi() {
   const [seciliFaturaId, setSeciliFaturaId] = useState<number | null>(null);
   const [kaydediyor, setKaydediyor] = useState(false);
 
-  // FİYAT GÜNCELLEME MODALI
+  // FİYAT GÜNCELLEME MODALI (TOPLU)
   const [fiyatModal, setFiyatModal] = useState<{
-    acik: boolean; urunId: number; urunAdi: string; yeniAlis: number;
-    eskiAlis: number; eskiSatis: number; karMarji: string; yeniSatis: string;
-    farkYuzde: string; yon: string;
+    acik: boolean;
+    urunler: Array<{
+      urunId: number; urunAdi: string; yeniAlis: number;
+      eskiAlis: number; eskiSatis: number; karMarji: string; yeniSatis: string;
+      farkYuzde: string; yon: string;
+    }>;
+    resolve: (guncelle: boolean) => void;
   } | null>(null);
 
   // TOPLU İŞLEM
@@ -449,47 +453,63 @@ export default function FaturaMerkezi() {
       }, 300);
   };
 
-  // ALIŞ FATURASI FİYAT FARKI KONTROLÜ
-  const alisFiyatKontrol = (urunId: number, urunAdi: string, eskiFiyat: number, yeniFiyat: number) => {
-      console.log("[alisFiyatKontrol] cagirildi:", { faturaTipi, urunAdi, urunId, eskiFiyat, yeniFiyat });
-      if (yeniFiyat <= 0) { console.log("[alisFiyatKontrol] yeni fiyat 0, atla"); return; }
-      const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // ALIŞ FATURASI FİYAT FARKI TOPLU KONTROLÜ (kaydet anında çağrılır)
+  const topluFiyatKontrol = async (): Promise<boolean> => {
+      if (faturaTipi !== "GELEN" || !aktifSirket) return true;
+      const degismisUrunler: Array<{
+          urunId: number; urunAdi: string; yeniAlis: number;
+          eskiAlis: number; eskiSatis: number; karMarji: string; yeniSatis: string;
+          farkYuzde: string; yon: string;
+      }> = [];
 
-      // Kayitli fiyat 0 ise — ilk kez fiyat giriliyor
-      if (eskiFiyat <= 0) {
-          onayla({
-              baslik: "Alis Fiyati Tanimlanmamis",
-              mesaj: `"${urunAdi}" urunun alis fiyati ilk kez giriliyor: ${fmt(yeniFiyat)} TL.\nStok kartina kaydetmek ister misiniz?`,
-              altMesaj: "Stok kartindaki alis fiyati guncellenecek.",
-              onayMetni: "Evet, Kaydet",
-              tehlikeli: false,
-              onOnayla: async () => {
-                  await supabase.from("urunler").update({ alis_fiyati: yeniFiyat }).eq("id", urunId);
-                  toast.success(`"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak kaydedildi.`);
-              },
-          });
-          return;
-      }
+      for (const k of faturaKalemleri.filter(k => k.urun_adi)) {
+          const yeniFiyat = pf(k.birim_fiyat);
+          if (yeniFiyat <= 0) continue;
 
-      // Fark hesapla
-      const fark = Math.abs(yeniFiyat - eskiFiyat);
-      const yuzde = (fark / eskiFiyat) * 100;
-      console.log("[alisFiyatKontrol] fark%:", yuzde.toFixed(2));
-      if (yuzde < 1) { console.log("[alisFiyatKontrol] %1 altinda, atla"); return; } // TEST: esik %1 (production'da %3 yapilacak)
-      const yon = yeniFiyat > eskiFiyat ? "artis" : "dusus";
+          const { data: u } = await supabase.from("urunler")
+              .select("id, alis_fiyati, satis_fiyati")
+              .eq("sahip_sirket_id", aktifSirket.id)
+              .eq("urun_adi", k.urun_adi)
+              .limit(1)
+              .single();
+          if (!u) continue;
 
-      // Mevcut satis fiyatini DB'den cek ve fiyat modal'ini ac
-      supabase.from("urunler").select("satis_fiyati").eq("id", urunId).single().then(({ data: urunData }) => {
-          const eskiSatis = Number(urunData?.satis_fiyati) || 0;
+          const eskiFiyat = Number(u.alis_fiyati) || 0;
+
+          // İlk kez fiyat girilen ürünler de listeye eklensin
+          if (eskiFiyat <= 0) {
+              degismisUrunler.push({
+                  urunId: u.id, urunAdi: k.urun_adi, yeniAlis: yeniFiyat,
+                  eskiAlis: 0, eskiSatis: Number(u.satis_fiyati) || 0,
+                  karMarji: "", yeniSatis: "",
+                  farkYuzde: "Yeni", yon: "yeni",
+              });
+              continue;
+          }
+
+          const fark = Math.abs(yeniFiyat - eskiFiyat);
+          const yuzde = (fark / eskiFiyat) * 100;
+          if (yuzde < 1) continue;
+
+          const eskiSatis = Number(u.satis_fiyati) || 0;
           const karMarji = eskiSatis > 0 && eskiFiyat > 0 ? ((eskiSatis - eskiFiyat) / eskiFiyat) * 100 : 0;
           const yeniSatis = karMarji > 0 ? Math.round(yeniFiyat * (1 + karMarji / 100) * 100) / 100 : 0;
-          setFiyatModal({
-              acik: true, urunId, urunAdi, yeniAlis: yeniFiyat,
+
+          degismisUrunler.push({
+              urunId: u.id, urunAdi: k.urun_adi, yeniAlis: yeniFiyat,
               eskiAlis: eskiFiyat, eskiSatis,
               karMarji: karMarji > 0 ? karMarji.toFixed(1) : "",
               yeniSatis: yeniSatis > 0 ? String(yeniSatis) : "",
-              farkYuzde: yuzde.toFixed(1), yon,
+              farkYuzde: yuzde.toFixed(1),
+              yon: yeniFiyat > eskiFiyat ? "artis" : "dusus",
           });
+      }
+
+      if (degismisUrunler.length === 0) return true;
+
+      // Modal aç ve kullanıcıdan yanıt bekle
+      return new Promise<boolean>((resolve) => {
+          setFiyatModal({ acik: true, urunler: degismisUrunler, resolve });
       });
   };
 
@@ -773,6 +793,11 @@ export default function FaturaMerkezi() {
 
       setKaydediyor(true);
       try {
+      // ALIŞ FATURASI: kaydetmeden önce tüm kalemlerde fiyat değişikliği kontrolü
+      const fiyatOnay = await topluFiyatKontrol();
+      // fiyatOnay true ise kullanıcı güncellemeyi onayladı veya değişiklik yok, false ise "Geçme" dedi
+      // Her iki durumda da fatura kaydedilecek (fiyat güncelleme modal'da halledildi)
+
       const gToplam = genelToplamHesapla();
       let islemYapilacakId = seciliFaturaId;
 
@@ -1151,7 +1176,7 @@ export default function FaturaMerkezi() {
                                     </td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? item.miktar : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0" value={item.miktar} onFocus={(e) => { satirGuncelle(index, "miktar", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "miktar", "1"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "miktar", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-center uppercase" : "p-0"}`}>{modalMod === "goruntule" ? item.birim : <select value={item.birim} onChange={(e) => satirGuncelle(index, "birim", e.target.value)} className="w-full px-1 py-1.5 text-[11px] font-bold text-center outline-none bg-transparent focus:bg-white cursor-pointer">{birimListesi.map(b => <option key={b.id} value={b.kisaltma}>{b.kisaltma}</option>)}{item.birim && !birimListesi.some(b => b.kisaltma === item.birim) && <option value={item.birim}>{item.birim}</option>}</select>}</td>
-                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); else if (faturaTipi === "GELEN" && item.urun_adi) { console.log("[onBlur-desktop] alis kontrol basladi:", item.urun_adi, e.target.value); const matchUrun = autoSonuclar.find(u => u.urun_adi === item.urun_adi) || null; if (matchUrun) { console.log("[onBlur-desktop] cache'den bulundu:", matchUrun.alis_fiyati); alisFiyatKontrol(matchUrun.id, matchUrun.urun_adi, matchUrun.alis_fiyati, pf(e.target.value)); } else { supabase.from("urunler").select("id, alis_fiyati").eq("sahip_sirket_id", aktifSirket?.id || 0).eq("urun_adi", item.urun_adi).limit(1).single().then(({ data: u }) => { console.log("[onBlur-desktop] DB'den geldi:", u); if (u) alisFiyatKontrol(u.id, item.urun_adi, Number(u.alis_fiyati), pf(e.target.value)); }); } }}} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
+                                    <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8]" : "p-0"}`} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>{modalMod === "goruntule" ? pf(item.birim_fiyat).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) : <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="w-full px-2 py-1.5 text-[11px] font-bold text-right text-[#1d4ed8] outline-none bg-transparent focus:bg-white" />}</td>
                                     <td className={`${modalMod === "goruntule" ? "px-2 py-1.5 text-xs font-bold text-center text-orange-600" : "p-1"}`}>{modalMod === "goruntule" ? `%${item.kdv_orani}` : <select value={String(item.kdv_orani)} onChange={(e) => satirGuncelle(index, "kdv_orani", Number(e.target.value))} onKeyDown={(e) => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); const yeniIndex = faturaKalemleri.length; setFaturaKalemleri(prev => [...prev, { urun_adi: "", miktar: "", birim: "Adet", birim_fiyat: "", kdv_orani: 20 }]); setTimeout(() => urunAdiInputRefs.current.get(yeniIndex)?.focus(), 50); } }} className="border rounded px-1 py-1 text-xs w-16 bg-white text-gray-800"><option value="0">%0</option><option value="1">%1</option><option value="10">%10</option><option value="20">%20</option></select>}</td>
                                     <td className="text-right text-[11px] font-semibold text-slate-900">{tutarKDVli.toLocaleString('tr-TR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                     {modalMod === "duzenle" && <td className="text-center print:hidden"><button onClick={() => satirSil(index)} className="text-slate-400 hover:text-red-600 outline-none"><i className="fas fa-times"></i></button></td>}
@@ -1211,7 +1236,7 @@ export default function FaturaMerkezi() {
                                             </div>
                                             <div style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}>
                                                 <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Birim Fiyat</label>
-                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); else if (faturaTipi === "GELEN" && item.urun_adi) { console.log("[onBlur-mobil] alis kontrol basladi:", item.urun_adi, e.target.value); supabase.from("urunler").select("id, alis_fiyati").eq("sahip_sirket_id", aktifSirket?.id || 0).eq("urun_adi", item.urun_adi).limit(1).single().then(({ data: u }) => { console.log("[onBlur-mobil] DB'den geldi:", u); if (u) alisFiyatKontrol(u.id, item.urun_adi, Number(u.alis_fiyati), pf(e.target.value)); }); }}} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="input-kurumsal w-full text-right text-[12px] font-bold text-[#1d4ed8]" />
+                                                <input type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" placeholder="0.00" value={item.birim_fiyat} onFocus={(e) => { satirGuncelle(index, "birim_fiyat", ""); }} onBlur={(e) => { if (!e.target.value) satirGuncelle(index, "birim_fiyat", "0"); }} onChange={(e) => { const val = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(val) || val === '') satirGuncelle(index, "birim_fiyat", val); }} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties} className="input-kurumsal w-full text-right text-[12px] font-bold text-[#1d4ed8]" />
                                             </div>
                                             <div>
                                                 <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">KDV %</label>
@@ -1312,71 +1337,90 @@ export default function FaturaMerkezi() {
 
       <OnayModal />
 
-      {/* FİYAT GÜNCELLEME MODALI */}
+      {/* TOPLU FİYAT GÜNCELLEME MODALI */}
       {fiyatModal?.acik && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white w-full max-w-md flex flex-col" style={{ border: "1px solid var(--c-border)" }}>
+          <div className="bg-white w-full max-w-lg flex flex-col max-h-[90vh]" style={{ border: "1px solid var(--c-border)" }}>
             <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
-              <h3 className="text-sm font-semibold text-orange-800 flex items-center"><i className="fas fa-exchange-alt mr-2"></i>Alis Fiyati Degismis</h3>
-              <button onClick={() => setFiyatModal(null)} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
+              <h3 className="text-sm font-semibold text-orange-800 flex items-center"><i className="fas fa-exchange-alt mr-2"></i>Alis Fiyatlari Degismis ({fiyatModal.urunler.length} urun)</h3>
+              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
             </div>
-            <div className="p-4 space-y-4">
-              {/* Bilgi */}
-              <div className="bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 font-bold">
-                <p>&quot;{fiyatModal.urunAdi}&quot; alis fiyati degismis!</p>
-                <p className="mt-1">Kayitli: {fiyatModal.eskiAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL → Yeni: {fiyatModal.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL ({fiyatModal.farkYuzde}% {fiyatModal.yon})</p>
-              </div>
-
-              {/* Kar Marji + Satis Fiyati */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Kar Marji (%)</label>
-                  <input type="text" inputMode="decimal" value={fiyatModal.karMarji} placeholder="0"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(",", ".");
-                      if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
-                      const marj = Number(v) || 0;
-                      const yeniS = marj > 0 ? Math.round(fiyatModal.yeniAlis * (1 + marj / 100) * 100) / 100 : 0;
-                      setFiyatModal({ ...fiyatModal, karMarji: v, yeniSatis: yeniS > 0 ? String(yeniS) : "" });
-                    }}
-                    className="input-kurumsal w-full text-center font-bold" />
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+              {fiyatModal.urunler.map((u, idx) => (
+                <div key={u.urunId} className="border border-slate-200 bg-white" style={{ borderLeft: "3px solid #ea580c" }}>
+                  {/* Ürün bilgi başlığı */}
+                  <div className="bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800" style={{ borderBottom: "1px solid #fde68a" }}>
+                    <div className="flex items-center justify-between">
+                      <span>{u.urunAdi}</span>
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase ${u.yon === "yeni" ? "bg-blue-100 text-blue-700" : u.yon === "artis" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                        {u.yon === "yeni" ? "Yeni Fiyat" : `%${u.farkYuzde} ${u.yon}`}
+                      </span>
+                    </div>
+                    {u.eskiAlis > 0 ? (
+                      <p className="mt-1 text-[11px]">{u.eskiAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL → {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</p>
+                    ) : (
+                      <p className="mt-1 text-[11px]">Yeni alis fiyati: {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</p>
+                    )}
+                  </div>
+                  {/* Kar marjı ve satış fiyatı */}
+                  <div className="px-3 py-2 grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Kar Marji (%)</label>
+                      <input type="text" inputMode="decimal" value={u.karMarji} placeholder="0"
+                        onChange={(e) => {
+                          const v = e.target.value.replace(",", ".");
+                          if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                          const marj = Number(v) || 0;
+                          const yeniS = marj > 0 ? Math.round(u.yeniAlis * (1 + marj / 100) * 100) / 100 : 0;
+                          const yeniUrunler = [...fiyatModal.urunler];
+                          yeniUrunler[idx] = { ...u, karMarji: v, yeniSatis: yeniS > 0 ? String(yeniS) : "" };
+                          setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
+                        }}
+                        className="input-kurumsal w-full text-center text-xs font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Yeni Satis Fiyati (TL)</label>
+                      <input type="text" inputMode="decimal" value={u.yeniSatis} placeholder="0.00"
+                        onChange={(e) => {
+                          const v = e.target.value.replace(",", ".");
+                          if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                          const satis = Number(v) || 0;
+                          const marj = satis > 0 && u.yeniAlis > 0 ? ((satis - u.yeniAlis) / u.yeniAlis) * 100 : 0;
+                          const yeniUrunler = [...fiyatModal.urunler];
+                          yeniUrunler[idx] = { ...u, yeniSatis: v, karMarji: marj > 0 ? marj.toFixed(1) : "0" };
+                          setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
+                        }}
+                        className="input-kurumsal w-full text-right text-xs font-bold text-[#1d4ed8]" />
+                    </div>
+                  </div>
+                  {/* Özet satırı */}
+                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 flex items-center justify-between" style={{ borderTop: "1px solid var(--c-border)" }}>
+                    <span>Alis: {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                    <span className="text-[#1d4ed8]">Satis: {Number(u.yeniSatis || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                    <span className="text-emerald-600">Kar: {(Number(u.yeniSatis || 0) - u.yeniAlis).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Yeni Satis Fiyati (TL)</label>
-                  <input type="text" inputMode="decimal" value={fiyatModal.yeniSatis} placeholder="0.00"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(",", ".");
-                      if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
-                      const satis = Number(v) || 0;
-                      const marj = satis > 0 && fiyatModal.yeniAlis > 0 ? ((satis - fiyatModal.yeniAlis) / fiyatModal.yeniAlis) * 100 : 0;
-                      setFiyatModal({ ...fiyatModal, yeniSatis: v, karMarji: marj > 0 ? marj.toFixed(1) : "0" });
-                    }}
-                    className="input-kurumsal w-full text-right font-bold text-[#1d4ed8]" />
-                </div>
-              </div>
-
-              {/* Ozet */}
-              <div className="bg-slate-50 p-3 text-xs font-bold text-slate-600 flex items-center justify-between" style={{ border: "1px solid var(--c-border)" }}>
-                <span>Alis: {fiyatModal.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
-                <span className="text-[#1d4ed8]">Satis: {Number(fiyatModal.yeniSatis || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
-                <span className="text-emerald-600">Kar: {(Number(fiyatModal.yeniSatis || 0) - fiyatModal.yeniAlis).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL ({fiyatModal.karMarji || "0"}%)</span>
-              </div>
-
-              {/* Butonlar */}
-              <div className="flex gap-2">
-                <button onClick={async () => {
-                  const guncel: Record<string, number> = { alis_fiyati: fiyatModal.yeniAlis };
-                  const satis = Number(fiyatModal.yeniSatis) || 0;
+              ))}
+            </div>
+            {/* Alt butonlar */}
+            <div className="p-3 flex gap-2 shrink-0" style={{ borderTop: "1px solid var(--c-border)", background: "#f8fafc" }}>
+              <button onClick={async () => {
+                const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
+                for (const u of fiyatModal.urunler) {
+                  const guncel: Record<string, number> = { alis_fiyati: u.yeniAlis };
+                  const satis = Number(u.yeniSatis) || 0;
                   if (satis > 0) guncel.satis_fiyati = satis;
-                  await supabase.from("urunler").update(guncel).eq("id", fiyatModal.urunId);
-                  const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
-                  toast.success(satis > 0
-                    ? `"${fiyatModal.urunAdi}" alis: ${fmt(fiyatModal.yeniAlis)} TL, satis: ${fmt(satis)} TL olarak guncellendi.`
-                    : `"${fiyatModal.urunAdi}" alis fiyati ${fmt(fiyatModal.yeniAlis)} TL olarak guncellendi.`);
-                  setFiyatModal(null);
-                }} className="flex-1 btn-primary py-2.5 text-xs font-bold uppercase tracking-widest"><i className="fas fa-check mr-1"></i> Guncelle</button>
-                <button onClick={() => setFiyatModal(null)} className="flex-1 btn-secondary py-2.5 text-xs font-bold uppercase tracking-widest">Vazgec</button>
-              </div>
+                  await supabase.from("urunler").update(guncel).eq("id", u.urunId);
+                }
+                toast.success(`${fiyatModal.urunler.length} urunun fiyati guncellendi.`);
+                fiyatModal.resolve(true);
+                setFiyatModal(null);
+              }} className="flex-1 btn-primary py-2.5 text-xs font-bold uppercase tracking-widest" style={{ background: "#ea580c" }}>
+                <i className="fas fa-check-double mr-1"></i> Tumunu Guncelle
+              </button>
+              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="flex-1 btn-secondary py-2.5 text-xs font-bold uppercase tracking-widest">
+                <i className="fas fa-forward mr-1"></i> Gecme
+              </button>
             </div>
           </div>
         </div>
