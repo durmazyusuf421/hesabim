@@ -230,6 +230,9 @@ GUVENLIK:
   - iyzico callback firma dogrulamasi (gercekId'nin sahipSirketId'ye
     ait oldugunu DB tarafinda dogrulamak)
 
+ASAMA 2 - Eylul 2026:
+  - muhasebeniz.com tanitim landing sayfasi (ozellikler, fiyatlandirma, demo talebi, referanslar, iletisim)
+
 
 5. BILINEN HATALAR / SORUNLAR
 ==============================================================

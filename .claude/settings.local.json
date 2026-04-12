@@ -48,7 +48,9 @@
       "Bash(cmd.exe //c \".\\\\yedek.bat\")",
       "Bash(wc:*)",
       "Bash(find C:/Users/durma/OneDrive/Desktop/muhasebe-pro/app -type d -name [*)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(cmd //c yedek.bat)",
+      "Bash(cmd //c \"cd /d C:\\\\Users\\\\durma\\\\OneDrive\\\\Desktop\\\\muhasebe-pro && yedek.bat\")"
     ]
   }
 }
