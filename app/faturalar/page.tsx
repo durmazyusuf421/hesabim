@@ -1339,73 +1339,126 @@ export default function FaturaMerkezi() {
 
       {/* TOPLU FİYAT GÜNCELLEME MODALI */}
       {fiyatModal?.acik && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white w-full max-w-lg flex flex-col max-h-[90vh]" style={{ border: "1px solid var(--c-border)" }}>
-            <div className="p-3 flex justify-between items-center shrink-0" style={{ background: "#f8fafc", borderBottom: "1px solid var(--c-border)" }}>
-              <h3 className="text-sm font-semibold text-orange-800 flex items-center"><i className="fas fa-exchange-alt mr-2"></i>Alis Fiyatlari Degismis ({fiyatModal.urunler.length} urun)</h3>
-              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="text-slate-500 hover:text-red-600 px-2"><i className="fas fa-times text-lg"></i></button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
+          <div className="bg-white w-full max-w-2xl flex flex-col max-h-[90vh] rounded-xl shadow-2xl overflow-hidden">
+            {/* BAŞLIK */}
+            <div className="px-6 py-4 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                  <i className="fas fa-tags text-white text-lg"></i>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Alis Fiyatlari Degisti</h3>
+                  <p className="text-blue-200 text-xs font-medium mt-0.5">{fiyatModal.urunler.length} urunde fiyat farki tespit edildi</p>
+                </div>
+              </div>
+              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/25 text-white/80 hover:text-white flex items-center justify-center transition-all">
+                <i className="fas fa-times"></i>
+              </button>
             </div>
-            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+
+            {/* ÜRÜN LİSTESİ */}
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1" style={{ background: "#f8fafc" }}>
               {fiyatModal.urunler.map((u, idx) => (
-                <div key={u.urunId} className="border border-slate-200 bg-white" style={{ borderLeft: "3px solid #ea580c" }}>
-                  {/* Ürün bilgi başlığı */}
-                  <div className="bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800" style={{ borderBottom: "1px solid #fde68a" }}>
-                    <div className="flex items-center justify-between">
-                      <span>{u.urunAdi}</span>
-                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase ${u.yon === "yeni" ? "bg-blue-100 text-blue-700" : u.yon === "artis" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                        {u.yon === "yeni" ? "Yeni Fiyat" : `%${u.farkYuzde} ${u.yon}`}
-                      </span>
+                <div key={u.urunId} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
+                  {/* Ürün başlık satırı */}
+                  <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid #e2e8f0" }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
+                        <i className="fas fa-cube text-sm"></i>
+                      </div>
+                      <span className="text-sm font-bold text-slate-800 truncate">{u.urunAdi}</span>
                     </div>
+                    <span className={`px-3 py-1 rounded-full text-[11px] font-bold shrink-0 ${
+                      u.yon === "yeni" ? "bg-blue-50 text-blue-600 border border-blue-200" :
+                      u.yon === "artis" ? "bg-red-50 text-red-600 border border-red-200" :
+                      "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                    }`}>
+                      {u.yon === "yeni" ? (
+                        <><i className="fas fa-plus mr-1 text-[9px]"></i>Yeni Fiyat</>
+                      ) : (
+                        <><i className={`fas fa-arrow-${u.yon === "artis" ? "up" : "down"} mr-1 text-[9px]`}></i>%{u.farkYuzde} {u.yon}</>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Fiyat değişim gösterimi */}
+                  <div className="px-5 py-3" style={{ background: u.yon === "artis" ? "#fef2f2" : u.yon === "dusus" ? "#f0fdf4" : "#eff6ff" }}>
                     {u.eskiAlis > 0 ? (
-                      <p className="mt-1 text-[11px]">{u.eskiAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL → {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</p>
+                      <div className="flex items-center gap-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 text-xs font-medium">Eski:</span>
+                          <span className="font-bold text-slate-500 line-through">{u.eskiAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                        </div>
+                        <i className="fas fa-long-arrow-alt-right text-slate-400"></i>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 text-xs font-medium">Yeni:</span>
+                          <span className={`font-bold text-base ${u.yon === "artis" ? "text-red-600" : "text-emerald-600"}`}>{u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                        </div>
+                      </div>
                     ) : (
-                      <p className="mt-1 text-[11px]">Yeni alis fiyati: {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</p>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-slate-500 text-xs font-medium">Yeni alis fiyati:</span>
+                        <span className="font-bold text-blue-600 text-base">{u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                      </div>
                     )}
                   </div>
-                  {/* Kar marjı ve satış fiyatı */}
-                  <div className="px-3 py-2 grid grid-cols-2 gap-2">
+
+                  {/* Kar marjı ve satış fiyatı inputları */}
+                  <div className="px-5 py-3 grid grid-cols-2 gap-4" style={{ borderTop: "1px solid #e2e8f0" }}>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Kar Marji (%)</label>
-                      <input type="text" inputMode="decimal" value={u.karMarji} placeholder="0"
-                        onChange={(e) => {
-                          const v = e.target.value.replace(",", ".");
-                          if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
-                          const marj = Number(v) || 0;
-                          const yeniS = marj > 0 ? Math.round(u.yeniAlis * (1 + marj / 100) * 100) / 100 : 0;
-                          const yeniUrunler = [...fiyatModal.urunler];
-                          yeniUrunler[idx] = { ...u, karMarji: v, yeniSatis: yeniS > 0 ? String(yeniS) : "" };
-                          setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
-                        }}
-                        className="input-kurumsal w-full text-center text-xs font-bold" />
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                        <i className="fas fa-percentage mr-1 text-[8px]"></i>Kar Marji
+                      </label>
+                      <div className="relative">
+                        <input type="text" inputMode="decimal" value={u.karMarji} placeholder="0"
+                          onChange={(e) => {
+                            const v = e.target.value.replace(",", ".");
+                            if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                            const marj = Number(v) || 0;
+                            const yeniS = marj > 0 ? Math.round(u.yeniAlis * (1 + marj / 100) * 100) / 100 : 0;
+                            const yeniUrunler = [...fiyatModal.urunler];
+                            yeniUrunler[idx] = { ...u, karMarji: v, yeniSatis: yeniS > 0 ? String(yeniS) : "" };
+                            setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
+                          }}
+                          className="w-full px-3 py-2.5 text-center text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">%</span>
+                      </div>
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Yeni Satis Fiyati (TL)</label>
-                      <input type="text" inputMode="decimal" value={u.yeniSatis} placeholder="0.00"
-                        onChange={(e) => {
-                          const v = e.target.value.replace(",", ".");
-                          if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
-                          const satis = Number(v) || 0;
-                          const marj = satis > 0 && u.yeniAlis > 0 ? ((satis - u.yeniAlis) / u.yeniAlis) * 100 : 0;
-                          const yeniUrunler = [...fiyatModal.urunler];
-                          yeniUrunler[idx] = { ...u, yeniSatis: v, karMarji: marj > 0 ? marj.toFixed(1) : "0" };
-                          setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
-                        }}
-                        className="input-kurumsal w-full text-right text-xs font-bold text-[#1d4ed8]" />
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                        <i className="fas fa-tag mr-1 text-[8px]"></i>Yeni Satis Fiyati
+                      </label>
+                      <div className="relative">
+                        <input type="text" inputMode="decimal" value={u.yeniSatis} placeholder="0.00"
+                          onChange={(e) => {
+                            const v = e.target.value.replace(",", ".");
+                            if (!/^\d*\.?\d*$/.test(v) && v !== "") return;
+                            const satis = Number(v) || 0;
+                            const marj = satis > 0 && u.yeniAlis > 0 ? ((satis - u.yeniAlis) / u.yeniAlis) * 100 : 0;
+                            const yeniUrunler = [...fiyatModal.urunler];
+                            yeniUrunler[idx] = { ...u, yeniSatis: v, karMarji: marj > 0 ? marj.toFixed(1) : "0" };
+                            setFiyatModal({ ...fiyatModal, urunler: yeniUrunler });
+                          }}
+                          className="w-full px-3 py-2.5 text-right text-sm font-bold text-[#1d4ed8] bg-blue-50/50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">TL</span>
+                      </div>
                     </div>
                   </div>
+
                   {/* Özet satırı */}
-                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 flex items-center justify-between" style={{ borderTop: "1px solid var(--c-border)" }}>
-                    <span>Alis: {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
-                    <span className="text-[#1d4ed8]">Satis: {Number(u.yeniSatis || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
-                    <span className="text-emerald-600">Kar: {(Number(u.yeniSatis || 0) - u.yeniAlis).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                  <div className="px-5 py-2.5 bg-slate-50 flex items-center justify-between text-xs font-bold" style={{ borderTop: "1px solid #e2e8f0" }}>
+                    <span className="text-slate-500"><i className="fas fa-shopping-cart mr-1 text-[9px] text-orange-400"></i>Alis: {u.yeniAlis.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                    <span className="text-[#1d4ed8]"><i className="fas fa-store mr-1 text-[9px]"></i>Satis: {Number(u.yeniSatis || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
+                    <span className="text-emerald-600"><i className="fas fa-chart-line mr-1 text-[9px]"></i>Kar: {(Number(u.yeniSatis || 0) - u.yeniAlis).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TL</span>
                   </div>
                 </div>
               ))}
             </div>
-            {/* Alt butonlar */}
-            <div className="p-3 flex gap-2 shrink-0" style={{ borderTop: "1px solid var(--c-border)", background: "#f8fafc" }}>
+
+            {/* ALT BUTONLAR */}
+            <div className="px-6 py-4 flex items-center gap-3 shrink-0 bg-white" style={{ borderTop: "2px solid #e2e8f0" }}>
               <button onClick={async () => {
-                const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
                 for (const u of fiyatModal.urunler) {
                   const guncel: Record<string, number> = { alis_fiyati: u.yeniAlis };
                   const satis = Number(u.yeniSatis) || 0;
@@ -1415,11 +1468,11 @@ export default function FaturaMerkezi() {
                 toast.success(`${fiyatModal.urunler.length} urunun fiyati guncellendi.`);
                 fiyatModal.resolve(true);
                 setFiyatModal(null);
-              }} className="flex-1 btn-primary py-2.5 text-xs font-bold uppercase tracking-widest" style={{ background: "#ea580c" }}>
-                <i className="fas fa-check-double mr-1"></i> Tumunu Guncelle
+              }} className="flex-[2] py-3.5 rounded-xl text-sm font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-[0.98]" style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)" }}>
+                <i className="fas fa-check-double"></i> Tumunu Guncelle
               </button>
-              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="flex-1 btn-secondary py-2.5 text-xs font-bold uppercase tracking-widest">
-                <i className="fas fa-forward mr-1"></i> Gecme
+              <button onClick={() => { fiyatModal.resolve(false); setFiyatModal(null); }} className="flex-1 py-3.5 rounded-xl text-sm font-bold text-slate-500 uppercase tracking-wider bg-slate-100 hover:bg-slate-200 flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
+                <i className="fas fa-forward text-xs"></i> Gecip Devam Et
               </button>
             </div>
           </div>
