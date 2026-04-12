@@ -470,16 +470,35 @@ export default function FaturaMerkezi() {
       console.log("[alisFiyatKontrol] fark%:", yuzde.toFixed(2));
       if (yuzde < 1) { console.log("[alisFiyatKontrol] %1 altinda, atla"); return; } // TEST: esik %1 (production'da %3 yapilacak)
       const yon = yeniFiyat > eskiFiyat ? "artis" : "dusus";
-      onayla({
-          baslik: "Alis Fiyati Degismis",
-          mesaj: `"${urunAdi}" urunun alis fiyati degismis!\nKayitli fiyat: ${fmt(eskiFiyat)} TL → Yeni fiyat: ${fmt(yeniFiyat)} TL (%${yuzde.toFixed(1)} ${yon})`,
-          altMesaj: "Stok kartindaki alis fiyatini guncellemek ister misiniz?",
-          onayMetni: "Evet, Guncelle",
-          tehlikeli: false,
-          onOnayla: async () => {
-              await supabase.from("urunler").update({ alis_fiyati: yeniFiyat }).eq("id", urunId);
-              toast.success(`"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak guncellendi.`);
-          },
+
+      // Kar marji hesapla — satis fiyatini da orantili guncelle
+      // Mevcut satis fiyatini DB'den cek
+      supabase.from("urunler").select("satis_fiyati").eq("id", urunId).single().then(({ data: urunData }) => {
+          const eskiSatis = Number(urunData?.satis_fiyati) || 0;
+          const karMarji = eskiSatis > 0 && eskiFiyat > 0 ? (eskiSatis - eskiFiyat) / eskiFiyat : 0;
+          const yeniSatis = karMarji > 0 ? Math.round(yeniFiyat * (1 + karMarji) * 100) / 100 : 0;
+          const marjYuzde = (karMarji * 100).toFixed(1);
+
+          const satisNotu = yeniSatis > 0
+              ? `\nSatis fiyati da %${marjYuzde} kar marji korunarak ${fmt(yeniSatis)} TL olarak guncellenecek.`
+              : "";
+
+          onayla({
+              baslik: "Alis Fiyati Degismis",
+              mesaj: `"${urunAdi}" urunun alis fiyati degismis!\nKayitli fiyat: ${fmt(eskiFiyat)} TL → Yeni fiyat: ${fmt(yeniFiyat)} TL (%${yuzde.toFixed(1)} ${yon})${satisNotu}`,
+              altMesaj: "Stok kartindaki fiyatlari guncellemek ister misiniz?",
+              onayMetni: "Evet, Guncelle",
+              tehlikeli: false,
+              onOnayla: async () => {
+                  const guncelVeri: Record<string, number> = { alis_fiyati: yeniFiyat };
+                  if (yeniSatis > 0) guncelVeri.satis_fiyati = yeniSatis;
+                  await supabase.from("urunler").update(guncelVeri).eq("id", urunId);
+                  const mesaj = yeniSatis > 0
+                      ? `"${urunAdi}" alis: ${fmt(yeniFiyat)} TL, satis: ${fmt(yeniSatis)} TL olarak guncellendi.`
+                      : `"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak guncellendi.`;
+                  toast.success(mesaj);
+              },
+          });
       });
   };
 
