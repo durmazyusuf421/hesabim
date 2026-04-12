@@ -445,13 +445,31 @@ export default function FaturaMerkezi() {
   // ALIŞ FATURASI FİYAT FARKI KONTROLÜ
   const alisFiyatKontrol = (urunId: number, urunAdi: string, eskiFiyat: number, yeniFiyat: number) => {
       console.log("[alisFiyatKontrol] cagirildi:", { faturaTipi, urunAdi, urunId, eskiFiyat, yeniFiyat });
-      if (eskiFiyat <= 0 || yeniFiyat <= 0) { console.log("[alisFiyatKontrol] fiyat 0 veya negatif, atla"); return; }
+      if (yeniFiyat <= 0) { console.log("[alisFiyatKontrol] yeni fiyat 0, atla"); return; }
+      const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // Kayitli fiyat 0 ise — ilk kez fiyat giriliyor
+      if (eskiFiyat <= 0) {
+          onayla({
+              baslik: "Alis Fiyati Tanimlanmamis",
+              mesaj: `"${urunAdi}" urunun alis fiyati ilk kez giriliyor: ${fmt(yeniFiyat)} TL.\nStok kartina kaydetmek ister misiniz?`,
+              altMesaj: "Stok kartindaki alis fiyati guncellenecek.",
+              onayMetni: "Evet, Kaydet",
+              tehlikeli: false,
+              onOnayla: async () => {
+                  await supabase.from("urunler").update({ alis_fiyati: yeniFiyat }).eq("id", urunId);
+                  toast.success(`"${urunAdi}" alis fiyati ${fmt(yeniFiyat)} TL olarak kaydedildi.`);
+              },
+          });
+          return;
+      }
+
+      // Fark hesapla
       const fark = Math.abs(yeniFiyat - eskiFiyat);
       const yuzde = (fark / eskiFiyat) * 100;
       console.log("[alisFiyatKontrol] fark%:", yuzde.toFixed(2));
       if (yuzde < 1) { console.log("[alisFiyatKontrol] %1 altinda, atla"); return; } // TEST: esik %1 (production'da %3 yapilacak)
       const yon = yeniFiyat > eskiFiyat ? "artis" : "dusus";
-      const fmt = (v: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       onayla({
           baslik: "Alis Fiyati Degismis",
           mesaj: `"${urunAdi}" urunun alis fiyati degismis!\nKayitli fiyat: ${fmt(eskiFiyat)} TL → Yeni fiyat: ${fmt(yeniFiyat)} TL (%${yuzde.toFixed(1)} ${yon})`,
