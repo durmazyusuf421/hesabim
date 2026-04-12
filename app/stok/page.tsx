@@ -14,9 +14,9 @@ interface Urun {
     doviz_turu?: string; doviz_fiyati?: number; lot_takibi?: boolean; seri_takibi?: boolean;
 }
 interface FormDataState {
-    urun_adi: string; barkod: string; stok_kodu: string; stok_miktari: number; birim: string;
-    alis_fiyati: number; satis_fiyati: number; kdv_orani: number; min_stok_miktari: number;
-    kategori_id: number | null; doviz_turu: string; doviz_fiyati: number; lot_takibi: boolean; seri_takibi: boolean;
+    urun_adi: string; barkod: string; stok_kodu: string; stok_miktari: string; birim: string;
+    alis_fiyati: string; satis_fiyati: string; kdv_orani: number; min_stok_miktari: string;
+    kategori_id: number | null; doviz_turu: string; doviz_fiyati: string; lot_takibi: boolean; seri_takibi: boolean;
 }
 interface LotSeriHareket { id: number; lot_no: string; seri_no: string; miktar: number; islem_tipi: string; uretim_tarihi: string | null; son_kullanma_tarihi: string | null; tedarikci: string | null; created_at: string; }
 interface DovizKuru { doviz_turu: string; kur: number; tarih: string; }
@@ -84,7 +84,7 @@ export default function StokKartlari() {
   const [yeniBirimKisaltma, setYeniBirimKisaltma] = useState("");
 
   const [formData, setFormData] = useState<FormDataState>({
-      urun_adi: "", barkod: "", stok_kodu: "", stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false
+      urun_adi: "", barkod: "", stok_kodu: "", stok_miktari: "", birim: "Adet", alis_fiyati: "", satis_fiyati: "", kdv_orani: 20, min_stok_miktari: "", kategori_id: null, doviz_turu: "TRY", doviz_fiyati: "", lot_takibi: false, seri_takibi: false
   });
 
   const sirketId = aktifSirket?.id;
@@ -132,24 +132,25 @@ export default function StokKartlari() {
               if (!isNaN(num)) sonrakiKod = String(num + 1).padStart(5, "0");
           }
       }
-      setFormData({ urun_adi: "", barkod: "", stok_kodu: sonrakiKod, stok_miktari: 0, birim: "Adet", alis_fiyati: 0, satis_fiyati: 0, kdv_orani: 20, min_stok_miktari: 0, kategori_id: null, doviz_turu: "TRY", doviz_fiyati: 0, lot_takibi: false, seri_takibi: false });
+      setFormData({ urun_adi: "", barkod: "", stok_kodu: sonrakiKod, stok_miktari: "", birim: "Adet", alis_fiyati: "", satis_fiyati: "", kdv_orani: 20, min_stok_miktari: "", kategori_id: null, doviz_turu: "TRY", doviz_fiyati: "", lot_takibi: false, seri_takibi: false });
       setModalAcik(true);
   };
 
   const urunDuzenle = (urun: Urun) => {
       setDuzenlemeModu(true); setSeciliUrunId(urun.id);
       setFormData({
-          urun_adi: urun.urun_adi, barkod: urun.barkod || "", stok_kodu: urun.stok_kodu || "", stok_miktari: urun.stok_miktari, birim: urun.birim,
-          alis_fiyati: urun.alis_fiyati, satis_fiyati: urun.satis_fiyati, kdv_orani: urun.kdv_orani, min_stok_miktari: urun.min_stok_miktari || 0,
-          kategori_id: urun.kategori_id || null, doviz_turu: urun.doviz_turu || "TRY", doviz_fiyati: Number(urun.doviz_fiyati) || 0,
+          urun_adi: urun.urun_adi, barkod: urun.barkod || "", stok_kodu: urun.stok_kodu || "", stok_miktari: String(urun.stok_miktari || ""), birim: urun.birim,
+          alis_fiyati: String(urun.alis_fiyati || ""), satis_fiyati: String(urun.satis_fiyati || ""), kdv_orani: urun.kdv_orani, min_stok_miktari: String(urun.min_stok_miktari || ""),
+          kategori_id: urun.kategori_id || null, doviz_turu: urun.doviz_turu || "TRY", doviz_fiyati: String(Number(urun.doviz_fiyati) || ""),
           lot_takibi: urun.lot_takibi || false, seri_takibi: urun.seri_takibi || false
       });
       setModalAcik(true);
   };
 
-  const dovizTlKarsiligi = (dovizTuru: string, dovizFiyat: number) => {
-      if (dovizTuru === "TRY" || !dovizFiyat) return 0;
-      return dovizFiyat * (dovizKurlari[dovizTuru] || 0);
+  const dovizTlKarsiligi = (dovizTuru: string, dovizFiyat: string | number) => {
+      const fiyat = Number(dovizFiyat) || 0;
+      if (dovizTuru === "TRY" || !fiyat) return 0;
+      return fiyat * (dovizKurlari[dovizTuru] || 0);
   };
 
   const dovizSembol: Record<string, string> = { TRY: "₺", USD: "$", EUR: "€" };
@@ -168,7 +169,16 @@ export default function StokKartlari() {
           }
       }
 
-      const kaydedilecekVeri = { ...formData, stok_kodu: stokKodu || null, sahip_sirket_id: aktifSirket?.id };
+      const kaydedilecekVeri = {
+          ...formData,
+          stok_miktari: Number(formData.stok_miktari) || 0,
+          alis_fiyati: Number(formData.alis_fiyati) || 0,
+          satis_fiyati: Number(formData.satis_fiyati) || 0,
+          min_stok_miktari: Number(formData.min_stok_miktari) || 0,
+          doviz_fiyati: Number(formData.doviz_fiyati) || 0,
+          stok_kodu: stokKodu || null,
+          sahip_sirket_id: aktifSirket?.id,
+      };
 
       if (duzenlemeModu && seciliUrunId) {
           const { error } = await supabase.from("urunler").update(kaydedilecekVeri).eq("id", seciliUrunId);
@@ -676,11 +686,11 @@ export default function StokKartlari() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Mevcut Stok Miktarı</label>
-                        <input type="number" min="0" value={formData.stok_miktari} onChange={(e) => setFormData({...formData, stok_miktari: Number(e.target.value)})} className="input-kurumsal w-full text-center" />
+                        <input type="text" inputMode="numeric" value={formData.stok_miktari} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setFormData({...formData, stok_miktari: v}); }} className="input-kurumsal w-full text-center" placeholder="0" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-orange-500 uppercase tracking-widest block mb-1.5">Minimum Stok Miktarı</label>
-                        <input type="number" min="0" value={formData.min_stok_miktari} onChange={(e) => setFormData({...formData, min_stok_miktari: Number(e.target.value)})} className="input-kurumsal w-full text-center" placeholder="0" />
+                        <input type="text" inputMode="numeric" value={formData.min_stok_miktari} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setFormData({...formData, min_stok_miktari: v}); }} className="input-kurumsal w-full text-center" placeholder="0" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Satış Birimi</label>
@@ -703,11 +713,11 @@ export default function StokKartlari() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2" style={{ borderTop: "1px solid var(--c-border)" }}>
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Birim Alış Fiyatı (TL)</label>
-                        <input type="number" min="0" value={formData.alis_fiyati} onChange={(e) => setFormData({...formData, alis_fiyati: Number(e.target.value)})} className="input-kurumsal w-full" />
+                        <input type="text" inputMode="decimal" value={formData.alis_fiyati} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setFormData({...formData, alis_fiyati: v}); }} className="input-kurumsal w-full" placeholder="0.00" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Birim Satış Fiyatı (TL)</label>
-                        <input type="number" min="0" value={formData.satis_fiyati} onChange={(e) => setFormData({...formData, satis_fiyati: Number(e.target.value)})} className="input-kurumsal w-full" />
+                        <input type="text" inputMode="decimal" value={formData.satis_fiyati} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setFormData({...formData, satis_fiyati: v}); }} className="input-kurumsal w-full" placeholder="0.00" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">KDV Oranı (%)</label>
@@ -733,7 +743,7 @@ export default function StokKartlari() {
                         <>
                             <div>
                                 <label className="text-[10px] font-bold text-[#3b82f6] uppercase tracking-widest block mb-1.5">Döviz Fiyatı ({dovizSembol[formData.doviz_turu]})</label>
-                                <input type="number" min="0" step="0.01" value={formData.doviz_fiyati} onChange={(e) => setFormData({...formData, doviz_fiyati: Number(e.target.value)})} className="input-kurumsal w-full" placeholder="0.00" />
+                                <input type="text" inputMode="decimal" value={formData.doviz_fiyati} onChange={(e) => { const v = e.target.value.replace(',', '.'); if (/^\d*\.?\d*$/.test(v) || v === '') setFormData({...formData, doviz_fiyati: v}); }} className="input-kurumsal w-full" placeholder="0.00" />
                             </div>
                             <div className="flex items-end">
                                 <div className="p-2 bg-blue-50 border border-blue-200 w-full text-center">
